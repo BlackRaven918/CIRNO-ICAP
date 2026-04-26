@@ -7,7 +7,7 @@ import signal
 import ahocorasick
 import re
 from pyicap import ICAPServer, BaseICAPRequestHandler
-
+import base64
 # --- Config ---
 CONFIG_DIR = "/home/jasper/pycap"
 PHRASELIST_DIR = f"{CONFIG_DIR}/phraselist"
@@ -22,28 +22,45 @@ AUTOMATONS = {}
 GOOD_AUTOMATONS = {}
 
 
-BLOCK_PAGE_TEMPLATE = """<html>
+
+
+def load_block_pages():
+    global URL_BLOCK_PAGE_TEMPLATE, BLOCK_PAGE_TEMPLATE
+    
+    try:
+        with open(f"{CONFIG_DIR}/stop_visiting.png", "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode()
+        img_tag = f'<img src="data:image/png;base64,{img_b64}" alt="stop" style="width:300px;">'
+    except Exception as e:
+        print(f"[WARN] Could not load block page image: {e}")
+        img_tag = ""
+
+    URL_BLOCK_PAGE_TEMPLATE = f"""<html>
 <head><title>Access Blocked By J-ICAP</title>
-<style>body{{background-color: lightred;color:white;font-family:sans-serif;}}</style>
+<style>
+body{{{{background-color: #ff4444;color:white;font-family:sans-serif;text-align:center;}}}}
+</style>
 </head>
 <body>
-<img src="./static/stop_visiting.png" alt="stop">
-<h1>Access Blocked By J-ICAP</h1>
-<p>You visited <b>{url}</b>.</p>
-<p>This page was blocked because it contains content in the <b>{category}</b> category.</p>
-<p>Matched keyword: <b>{keyword}</b></p>
+{img_tag}
+<h1>Access Blocked</h1>
+<p>You visited <b>{{url}}</b>.</p>
+<p>This site is blocked under the <b>{{category}}</b> category.</p>
 </body>
 </html>"""
 
-URL_BLOCK_PAGE_TEMPLATE = """<html>
+    BLOCK_PAGE_TEMPLATE = f"""<html>
 <head><title>Access Blocked By J-ICAP</title>
-<style>body{{background-color: lightred;color:white;font-family:sans-serif;}}</style>
+<style>
+body{{{{background-color: #ff4444;color:white;font-family:sans-serif;text-align:center;}}}}
+</style>
 </head>
 <body>
-<img src="./static/stop_visiting.png" alt="stop">
+{img_tag}
 <h1>Access Blocked</h1>
-<p>You visited <b>{url}</b>.</p>
-<p>This site is blocked under the <b>{category}</b> category.</p>
+<p>You visited <b>{{url}}</b>.</p>
+<p>This page was blocked because it contains content in the <b>{{category}}</b> category.</p>
+<p>Matched keywords: <b>{{keyword}}</b></p>
 </body>
 </html>"""
 
@@ -204,7 +221,7 @@ def is_whole_word_match(text, keyword, end_index):
 
 # Load on startup
 load_config()
-
+load_block_pages()
 # Reload config on SIGUSR1 without restarting
 signal.signal(signal.SIGUSR1, lambda sig, frame: load_config())
 
