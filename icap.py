@@ -8,7 +8,10 @@ PHRASELIST_DIR = "./phraselist"
 
 
 
-
+KEYWORDS = [
+    "gambling", "casino", "drugs", "malware",
+    "phishing", "keyword1", "keyword2"
+]
 
 
 
