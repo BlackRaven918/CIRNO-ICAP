@@ -1,0 +1,2 @@
+pyahocorasick==2.3.0
+pyicap==1.0b1

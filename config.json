@@ -1,0 +1,9 @@
+{
+    "block_threshold": 400,
+    "enabled_categories": [
+        "adult",
+        "gambling",
+        "goodphrases",
+        "illegaldrugs"
+    ]
+}

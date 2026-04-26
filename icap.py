@@ -4,21 +4,31 @@ import gzip
 import json
 import os
 import signal
+import ahocorasick
+import re
+from pyicap import ICAPServer, BaseICAPRequestHandler
 
 # --- Config ---
 CONFIG_DIR = "/home/jasper/pycap"
 PHRASELIST_DIR = f"{CONFIG_DIR}/phraselist"
 DOMAINLIST_DIR = f"{CONFIG_DIR}/domainlist"
+CONFIG_FILE = f"{CONFIG_DIR}/config.json"
 
 KEYWORD_CATEGORIES = {}
 BLOCKED_URL_CATEGORIES = {}
+KEYWORD_SCORES = {} 
+GOOD_SCORES = {}
+AUTOMATONS = {}
+GOOD_AUTOMATONS = {}
+
 
 BLOCK_PAGE_TEMPLATE = """<html>
-<head><title>Access Blocked By JCAP</title>
-<style>body{{background-color: red;color:white;font-family:sans-serif;}}</style>
+<head><title>Access Blocked By J-ICAP</title>
+<style>body{{background-color: lightred;color:white;font-family:sans-serif;}}</style>
 </head>
 <body>
-<h1>Access Blocked</h1>
+<img src="./static/stop_visiting.png" alt="stop">
+<h1>Access Blocked By J-ICAP</h1>
 <p>You visited <b>{url}</b>.</p>
 <p>This page was blocked because it contains content in the <b>{category}</b> category.</p>
 <p>Matched keyword: <b>{keyword}</b></p>
@@ -26,10 +36,11 @@ BLOCK_PAGE_TEMPLATE = """<html>
 </html>"""
 
 URL_BLOCK_PAGE_TEMPLATE = """<html>
-<head><title>Access Blocked By JCAP</title>
-<style>body{{background-color: red;color:white;font-family:sans-serif;}}</style>
+<head><title>Access Blocked By J-ICAP</title>
+<style>body{{background-color: lightred;color:white;font-family:sans-serif;}}</style>
 </head>
 <body>
+<img src="./static/stop_visiting.png" alt="stop">
 <h1>Access Blocked</h1>
 <p>You visited <b>{url}</b>.</p>
 <p>This site is blocked under the <b>{category}</b> category.</p>
@@ -38,69 +49,164 @@ URL_BLOCK_PAGE_TEMPLATE = """<html>
 
 
 def load_e2guardian_list(filepath):
-    phrases = []
+    phrases = {}  # {phrase: score}
     try:
         with open(filepath, encoding='utf-8', errors='ignore') as f:
             for line in f:
                 line = line.strip()
-                if not line:
+
+                # Skip empty lines and comments
+                if not line or line.startswith('#'):
                     continue
-                if line.startswith('#'):
-                    continue
+
+                # Skip include directives
                 if line.startswith('<include>'):
                     continue
+
+                # Handle weighted phrase lines like:
+                # < adult >,< sex >,< escorts ><80>
+                # < gambling ><50>
+                # < bollocks ><25>
                 if line.startswith('<'):
-                    line = line.split('>')[0].lstrip('<').strip()
-                phrases.append(line.lower())
+                    try:
+                        # Extract the score — it's always the last <number>
+                        last_open = line.rfind('<')
+                        last_close = line.rfind('>')
+                        score_str = line[last_open+1:last_close].strip()
+
+                        if score_str.lstrip('-').isdigit():
+                            score = int(score_str)
+                            # Everything before the last <score> is the phrase(s)
+                            phrase_part = line[:last_open]
+                        else:
+                            # No score found, default
+                            score = 10
+                            phrase_part = line
+
+                        # Split by comma to handle multiple phrases per line
+                        parts = phrase_part.split(',')
+                        for part in parts:
+                            # Strip < > and whitespace
+                            phrase = part.strip().strip('<>').strip()
+                            if phrase:
+                                phrases[phrase.lower()] = score
+
+                    except Exception as e:
+                        print(f"[WARN] Could not parse line '{line}': {e}")
+                        continue
+                else:
+                    # Plain phrase with no weight
+                    phrases[line.lower()] = 10
+
     except Exception as e:
         print(f"[WARN] Could not read {filepath}: {e}")
     return phrases
 
 
+def build_automatons():
+    global AUTOMATONS, GOOD_AUTOMATONS
+    AUTOMATONS = {}
+    GOOD_AUTOMATONS = {}
+
+    for category, keywords in KEYWORD_SCORES.items():
+        A = ahocorasick.Automaton()
+        for keyword, score in keywords.items():
+            print(f"[DEBUG] Adding keyword: '{keyword}' score: {score}")  # add this
+            A.add_word(keyword, (keyword, score))
+        A.make_automaton()
+        AUTOMATONS[category] = A
+
+
+CONFIG_FILE = f"{CONFIG_DIR}/config.json"
+
 def load_config():
-    global KEYWORD_CATEGORIES, BLOCKED_URL_CATEGORIES
+    global KEYWORD_CATEGORIES, BLOCKED_URL_CATEGORIES, KEYWORD_SCORES, GOOD_SCORES, BLOCK_THRESHOLD, ENABLED_CATEGORIES
+
+
+    # Load main config
+    try:
+        with open(CONFIG_FILE) as f:
+            config = json.load(f)
+            BLOCK_THRESHOLD = config.get("block_threshold", 100)
+            ENABLED_CATEGORIES = [c.lower() for c in config.get("enabled_categories", [])]
+            print(f"[INFO] Block threshold: {BLOCK_THRESHOLD}")
+            print(f"[INFO] Enabled categories: {ENABLED_CATEGORIES}")
+    except Exception as e:
+        print(f"[WARN] Could not read config.json, using defaults: {e}")
+        BLOCK_THRESHOLD = 100
+        ENABLED_CATEGORIES = []  # empty = all categories enabled
+
     KEYWORD_CATEGORIES = {}
     BLOCKED_URL_CATEGORIES = {}
+    KEYWORD_SCORES = {}
+    GOOD_SCORES = {}
 
-    # Load phraselists
     if os.path.exists(PHRASELIST_DIR):
         for category in os.listdir(PHRASELIST_DIR):
+            # Skip disabled categories
+            if ENABLED_CATEGORIES and category.lower() not in ENABLED_CATEGORIES:
+                print(f"[INFO] Skipping disabled category: {category}")
+                continue
+
             category_path = os.path.join(PHRASELIST_DIR, category)
             if not os.path.isdir(category_path):
                 continue
-            phrases = []
+
+            all_phrases = {}
+            good_phrases = {}
+
             for filename in os.listdir(category_path):
                 filepath = os.path.join(category_path, filename)
-                if os.path.isfile(filepath):
-                    phrases.extend(load_e2guardian_list(filepath))
-            if phrases:
-                KEYWORD_CATEGORIES[category] = list(set(phrases))
-                print(f"[INFO] Loaded {len(KEYWORD_CATEGORIES[category])} phrases for category: {category}")
+                if not os.path.isfile(filepath):
+                    continue
+                if 'good' in filename.lower():
+                    good_phrases.update(load_e2guardian_list(filepath))
+                else:
+                    all_phrases.update(load_e2guardian_list(filepath))
 
-    # Load domain lists
+            if all_phrases:
+                KEYWORD_CATEGORIES[category] = list(all_phrases.keys())
+                KEYWORD_SCORES[category] = all_phrases
+                GOOD_SCORES[category] = good_phrases
+                print(f"[INFO] Loaded {len(all_phrases)} phrases and {len(good_phrases)} good phrases for category: {category}")
+                print(f"[DEBUG] Sample keywords for {category}: {list(KEYWORD_SCORES[category].keys())[:10]}")
+
+
     if os.path.exists(DOMAINLIST_DIR):
         for filename in os.listdir(DOMAINLIST_DIR):
             filepath = os.path.join(DOMAINLIST_DIR, filename)
             if not os.path.isfile(filepath):
                 continue
             category = filename.replace('banned', '').replace('domains', '').replace('list', '').strip('_').title()
-            domains = load_e2guardian_list(filepath)
+            if ENABLED_CATEGORIES and category.lower() not in ENABLED_CATEGORIES:
+                continue
+            domains = list(load_e2guardian_list(filepath).keys())
             if domains:
                 BLOCKED_URL_CATEGORIES[category] = domains
                 print(f"[INFO] Loaded {len(domains)} domains for category: {category}")
 
     print(f"[INFO] Config reloaded - {len(KEYWORD_CATEGORIES)} keyword categories, {len(BLOCKED_URL_CATEGORIES)} URL categories")
+    build_automatons()
 
+
+def is_whole_word_match(text, keyword, end_index):
+    start_index = end_index - len(keyword) + 1
+    
+    # Check character before the match
+    if start_index > 0 and text[start_index - 1].isalnum():
+        return False
+    
+    # Check character after the match
+    if end_index + 1 < len(text) and text[end_index + 1].isalnum():
+        return False
+    
+    return True
 
 # Load on startup
 load_config()
 
 # Reload config on SIGUSR1 without restarting
 signal.signal(signal.SIGUSR1, lambda sig, frame: load_config())
-
-
-from pyicap import ICAPServer, BaseICAPRequestHandler
-
 
 class KeywordFilter(BaseICAPRequestHandler):
 
@@ -189,26 +295,48 @@ class KeywordFilter(BaseICAPRequestHandler):
             except Exception as e:
                 print(f"[DEBUG] Gzip decompress failed: {e}")
 
-        # Only scan HTML
+        # Only scan HTML - this must be at the same level as the gzip block, not inside it
         if 'text/html' in content_type:
             text = body.decode('utf-8', errors='ignore').lower()
-            for category, keywords in KEYWORD_CATEGORIES.items():
-                for keyword in keywords:
-                    if keyword.lower() in text:
-                        print(f"[BLOCKED] Category: {category} | Keyword: {keyword}")
-                        block_page = BLOCK_PAGE_TEMPLATE.format(
-                            category=category,
-                            keyword=keyword,
-                            url=url
-                        ).encode()
-                        self.set_icap_response(200)
-                        self.set_enc_status(b'HTTP/1.1 403 Forbidden')
-                        self.set_enc_header(b'Content-Type', b'text/html')
-                        self.set_enc_header(b'Content-Length', str(len(block_page)).encode())
-                        self.send_headers(True)
-                        self.write_chunk(block_page)
-                        self.write_chunk(b"")
-                        return
+
+            print(f"[DEBUG] Automatons available: {list(AUTOMATONS.keys())}")
+
+            for category, automaton in AUTOMATONS.items():
+                total_score = 0
+                matched_keywords = []
+                matched_good = []
+
+                for end_index, (keyword, score) in automaton.iter(text):
+                    if not is_whole_word_match(text, keyword, end_index):
+                        continue
+                    total_score += score
+                    matched_keywords.append(f"{keyword} (+{score})")
+
+                if category in GOOD_AUTOMATONS:
+                    for end_index, (keyword, score) in GOOD_AUTOMATONS[category].iter(text):
+                        if not is_whole_word_match(text, keyword, end_index):
+                            continue
+                        total_score -= score
+                        matched_good.append(f"{keyword} (-{score})")
+
+                print(f"[DEBUG] Category: {category} | Score: {total_score} | Bad: {matched_keywords[:5]} | Good: {matched_good[:5]}")
+
+                if total_score >= BLOCK_THRESHOLD:
+                    print(f"[BLOCKED] Category: {category} | Score: {total_score}")
+                    block_page = BLOCK_PAGE_TEMPLATE.format(
+                        category=category,
+                        keyword=", ".join(matched_keywords[:10]),
+                        url=url
+                    ).encode()
+                    self.set_icap_response(200)
+                    self.set_enc_status(b'HTTP/1.1 403 Forbidden')
+                    self.set_enc_header(b'Content-Type', b'text/html')
+                    self.set_enc_header(b'Content-Length', str(len(block_page)).encode())
+                    self.send_headers(True)
+                    self.write_chunk(block_page)
+                    self.write_chunk(b"")
+                    return
+
 
         # Pass through - update content-length since we decompressed
         self.set_icap_response(200)
