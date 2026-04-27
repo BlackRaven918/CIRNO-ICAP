@@ -6,6 +6,10 @@ import os
 import signal
 import ahocorasick
 import re
+import clamd
+import io
+
+
 from pyicap import ICAPServer, BaseICAPRequestHandler
 import base64
 # --- Config ---
@@ -13,6 +17,8 @@ CONFIG_DIR = "/home/jasper/J-ICAP"
 PHRASELIST_DIR = f"{CONFIG_DIR}/phraselist"
 DOMAINLIST_DIR = f"{CONFIG_DIR}/domainlist"
 CONFIG_FILE = f"{CONFIG_DIR}/config.json"
+MAX_SCAN_SIZE = 25 * 1024 * 1024
+
 
 KEYWORD_CATEGORIES = {}
 BLOCKED_URL_CATEGORIES = {}
@@ -25,7 +31,7 @@ GOOD_AUTOMATONS = {}
 
 
 def load_block_pages():
-    global URL_BLOCK_PAGE_TEMPLATE, BLOCK_PAGE_TEMPLATE
+    global URL_BLOCK_PAGE_TEMPLATE, BLOCK_PAGE_TEMPLATE, VIRUS_BLOCK_PAGE_TEMPLATE
     
     try:
         with open(f"{CONFIG_DIR}/stop_visiting.png", "rb") as f:
@@ -61,6 +67,17 @@ body{{{{background-color: #ff4444;color:white;font-family:sans-serif;text-align:
 <p>You visited <b>{{url}}</b>.</p>
 <p>This page was blocked because it contains content in the <b>{{category}}</b> category.</p>
 <p>Matched keywords: <b>{{keyword}}</b></p>
+</body>
+</html>"""
+    VIRUS_BLOCK_PAGE_TEMPLATE = f"""<html>
+<head><title>Virus Blocked By J-ICAP</title>
+<style>body{{{{background-color: #ff4444;color:white;font-family:sans-serif;text-align:center;}}}}</style>
+</head>
+<body>
+{img_tag}
+<h1>Virus Blocked</h1>
+<p>A virus was detected in a file downloaded from <b>{{url}}</b>.</p>
+<p>Threat: <b>{{virus}}</b></p>
 </body>
 </html>"""
 
@@ -121,7 +138,7 @@ def load_e2guardian_list(filepath):
 
 def get_client_ip(self):
     # Try X-Client-IP header first (set by Squid when icap_send_client_ip is on)
-    print(f"[DEBUG] ICAP headers: {self.headers}")
+    #print(f"[DEBUG] ICAP headers: {self.headers}")
     x_client_ip = self.headers.get(b'x-client-ip', [b''])[0].decode('utf-8', errors='ignore')
     if x_client_ip:
         return x_client_ip
@@ -165,7 +182,7 @@ def load_config():
                     "block_threshold": group_cfg.get("block_threshold", DEFAULT_CONFIG["block_threshold"]),
                     "enabled_categories": [c.lower() for c in group_cfg.get("enabled_categories", [])]
                 }
-            print(f"[INFO] Loaded {len(GROUPS)} groups")
+            #print(f"[INFO] Loaded {len(GROUPS)} groups")
     except Exception as e:
         print(f"[WARN] Could not read config.json: {e}")
         DEFAULT_CONFIG = {"block_threshold": 100, "enabled_categories": []}
@@ -199,7 +216,7 @@ def load_config():
                 KEYWORD_CATEGORIES[category] = list(all_phrases.keys())
                 KEYWORD_SCORES[category] = all_phrases
                 GOOD_SCORES[category] = good_phrases
-                print(f"[INFO] Loaded {len(all_phrases)} phrases and {len(good_phrases)} good phrases for category: {category}")
+                #print(f"[INFO] Loaded {len(all_phrases)} phrases and {len(good_phrases)} good phrases for category: {category}")
                 # print(f"[DEBUG] Sample keywords for {category}: {list(KEYWORD_SCORES[category].keys())[:10]}")
 
 
@@ -216,13 +233,13 @@ def load_config():
                 BLOCKED_URL_CATEGORIES[category] = domains
                 #print(f"[INFO] Loaded {len(domains)} domains for category: {category}")
 
-    print(f"[INFO] Config reloaded - {len(KEYWORD_CATEGORIES)} keyword categories, {len(BLOCKED_URL_CATEGORIES)} URL categories")
+    #print(f"[INFO] Config reloaded - {len(KEYWORD_CATEGORIES)} keyword categories, {len(BLOCKED_URL_CATEGORIES)} URL categories")
     build_automatons()
 
 def get_group_config(client_ip):
     for group_name, group_cfg in GROUPS.items():
         if client_ip in group_cfg["ips"]:
-            print(f"[DEBUG] Client {client_ip} matched group: {group_name}")
+            #print(f"[DEBUG] Client {client_ip} matched group: {group_name}")
             return group_cfg
     #print(f"[DEBUG] Client {client_ip} using default config")
     return DEFAULT_CONFIG
@@ -240,9 +257,44 @@ def is_whole_word_match(text, keyword, end_index):
     
     return True
 
+
+def load_clamav():
+    global cd
+    cd = None
+    try:
+        cd = clamd.ClamdUnixSocket()
+        cd.ping()
+        #print("[INFO] ClamAV daemon connected")
+    except Exception as e:
+        cd = None
+        print(f"[WARN] ClamAV not available: {e}")
+
+SKIP_SCAN_TYPES = [
+    'text/html', 'text/css', 'text/javascript',
+    'application/javascript', 'application/json',
+    'image/', 'font/', 'audio/', 'video/'
+]
+
+def scan_with_clamav(data):
+    if cd is None:
+        #print("[DEBUG] ClamAV not available, skipping scan")
+        return None, None
+    try:
+        result = cd.instream(io.BytesIO(data))
+        status, reason = result['stream']
+        #print(f"[DEBUG] ClamAV result: {status} {reason}")
+        return status, reason
+    except Exception as e:
+        #print(f"[WARN] ClamAV scan error: {e}")
+        return None, None
+
+
+
+
 # Load on startup
 load_config()
 load_block_pages()
+load_clamav()
 # Reload config on SIGUSR1 without restarting
 signal.signal(signal.SIGUSR1, lambda sig, frame: load_config())
 
@@ -269,9 +321,6 @@ class KeywordFilter(BaseICAPRequestHandler):
         block_threshold = group_cfg["block_threshold"]
         enabled_categories = group_cfg["enabled_categories"]
 
-        print(f"[DEBUG] Client IP: {client_ip}")
-
-
         body = b""
         if self.has_body:
             while True:
@@ -281,16 +330,18 @@ class KeywordFilter(BaseICAPRequestHandler):
                 body += chunk
 
         url = self.enc_req_headers.get(b'host', [b''])[0].decode('utf-8', errors='ignore')
-        #print(f"[DEBUG] REQMOD URL: {url} | Client: {client_ip}")
 
         # No group match - pass through without filtering
         if enabled_categories is None:
-            #print(f"[DEBUG] Client {client_ip} not in any group - passing through")
             self.set_icap_response(200)
             self.set_enc_request(b" ".join(self.enc_req))
             for header, values in self.enc_req_headers.items():
+                if header in (b'if-modified-since', b'if-none-match', b'if-range'):
+                    continue
                 for val in values:
                     self.set_enc_header(header, val)
+            self.set_enc_header(b'cache-control', b'no-cache')
+            self.set_enc_header(b'pragma', b'no-cache')
             self.send_headers(body != b"")
             if body:
                 self.write_chunk(body)
@@ -317,12 +368,16 @@ class KeywordFilter(BaseICAPRequestHandler):
                     self.write_chunk(b"")
                     return
 
-        # Pass through
+        # Pass through with cache-busting
         self.set_icap_response(200)
         self.set_enc_request(b" ".join(self.enc_req))
         for header, values in self.enc_req_headers.items():
+            if header in (b'if-modified-since', b'if-none-match', b'if-range'):
+                continue
             for val in values:
                 self.set_enc_header(header, val)
+        self.set_enc_header(b'cache-control', b'no-cache')
+        self.set_enc_header(b'pragma', b'no-cache')
         self.send_headers(body != b"")
         if body:
             self.write_chunk(body)
@@ -375,6 +430,34 @@ class KeywordFilter(BaseICAPRequestHandler):
             except Exception as e:
                 print(f"[DEBUG] Gzip decompress failed: {e}")
 
+        #print(f"[DEBUG] content-type: {content_type} | body size: {len(body)}")
+
+
+        print(f"[DEBUG] content-type for ClamAV check: {content_type}")
+
+        should_scan = body and cd is not None and not any(ct in content_type for ct in SKIP_SCAN_TYPES)
+
+        if should_scan:
+            print(f"[DEBUG] Sending to ClamAV: {content_type} | {len(body)} bytes")
+            if len(body) <= MAX_SCAN_SIZE:
+                status, reason = scan_with_clamav(body)
+                if status == 'FOUND':
+                    print(f"[BLOCKED] Virus found: {reason} | URL: {url}")
+                    block_page = VIRUS_BLOCK_PAGE_TEMPLATE.format(
+                        url=url,
+                        virus=reason
+                    ).encode()
+                    self.set_icap_response(200)
+                    self.set_enc_status(b'HTTP/1.1 403 Forbidden')
+                    self.set_enc_header(b'Content-Type', b'text/html')
+                    self.set_enc_header(b'Content-Length', str(len(block_page)).encode())
+                    self.send_headers(True)
+                    self.write_chunk(block_page)
+                    self.write_chunk(b"")
+                    return
+                elif status == 'ERROR':
+                    print(f"[WARN] ClamAV scan error for {url}: {reason}")
+
         # Only scan HTML
         if 'text/html' in content_type:
             text = body.decode('utf-8', errors='ignore').lower()
@@ -403,7 +486,7 @@ class KeywordFilter(BaseICAPRequestHandler):
                 #print(f"[DEBUG] Client: {client_ip} | Category: {category} | Score: {total_score} | Threshold: {block_threshold} | Bad: {matched_keywords[:5]} | Good: {matched_good[:5]}")
 
                 if total_score >= block_threshold:
-                    print(f"[BLOCKED] Client: {client_ip} | Category: {category} | Score: {total_score}")
+                    #print(f"[BLOCKED] Client: {client_ip} | Category: {category} | Score: {total_score}")
                     block_page = BLOCK_PAGE_TEMPLATE.format(
                         category=category,
                         keyword=", ".join(matched_keywords[:10]),
