@@ -1,9 +1,30 @@
 {
-    "block_threshold": 400,
-    "enabled_categories": [
-        "adult",
-        "gambling",
-        "goodphrases",
-        "illegaldrugs"
-    ]
+    "default": {
+        "block_threshold": 400,
+        "enabled_categories": []
+    },
+    "groups": {
+        "students": {
+            "block_threshold": 200,
+            "enabled_categories": [
+                "adult",
+                "gambling",
+                "weapons",
+                "games",
+                "chat"
+            ],
+            "ips": [
+                "192.168.10.20"
+            ]
+        },
+        "teachers": {
+            "block_threshold": 400,
+            "enabled_categories": [
+                "gambling"
+            ],
+            "ips": [
+                "192.168.11.211"
+            ]
+        }
+    }
 }

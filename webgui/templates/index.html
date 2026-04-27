@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>J-ICAP — Group Manager</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f5f4;
+    --surface: #ffffff;
+    --border: #e2e0da;
+    --border-strong: #c8c6c0;
+    --text: #1a1a18;
+    --text-muted: #6b6b67;
+    --text-faint: #a0a09a;
+    --accent: #1a1a18;
+    --accent-text: #ffffff;
+    --info-bg: #e6f1fb;
+    --info-text: #185fa5;
+    --info-border: #b5d4f4;
+    --danger-text: #a32d2d;
+    --danger-bg: #fcebeb;
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .topbar-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .topbar-title span {
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+
+  .topbar-badge {
+    font-size: 11px;
+    background: var(--info-bg);
+    color: var(--info-text);
+    border: 1px solid var(--info-border);
+    border-radius: 20px;
+    padding: 2px 10px;
+  }
+
+  .main {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem;
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .card-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .card-header-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .btn-icon {
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    line-height: 1;
+    color: var(--text);
+  }
+
+  .btn-icon:hover { background: var(--bg); }
+
+  .group-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .group-item:last-child { border-bottom: none; }
+  .group-item:hover { background: var(--bg); }
+
+  .group-item.active {
+    background: var(--info-bg);
+    border-left: 3px solid var(--info-text);
+  }
+
+  .group-item.active .group-name { color: var(--info-text); }
+
+  .group-name { font-size: 13px; font-weight: 500; }
+  .group-meta { font-size: 11px; color: var(--text-faint); margin-top: 1px; }
+
+  .btn-del {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-faint);
+    font-size: 13px;
+    padding: 2px 5px;
+    border-radius: 4px;
+    line-height: 1;
+  }
+
+  .btn-del:hover { color: var(--danger-text); background: var(--danger-bg); }
+
+  .add-group-form {
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    display: none;
+    gap: 8px;
+  }
+
+  .add-group-form.visible { display: flex; }
+
+  .panel { padding: 1.25rem; }
+
+  .panel-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    color: var(--text-faint);
+    font-size: 13px;
+  }
+
+  .panel-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .panel-title { font-size: 15px; font-weight: 600; }
+
+  .threshold-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .threshold-label { font-size: 12px; color: var(--text-muted); }
+
+  input[type=range] {
+    width: 120px;
+    accent-color: var(--accent);
+  }
+
+  .threshold-val { font-size: 13px; font-weight: 600; min-width: 36px; }
+
+  .section { margin-bottom: 1.5rem; }
+  .section:last-child { margin-bottom: 0; }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+  }
+
+  .ip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; min-height: 28px; }
+
+  .ip-tag {
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 20px;
+    padding: 3px 10px 3px 12px;
+    font-size: 12px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ip-tag button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-faint);
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+  }
+
+  .ip-tag button:hover { color: var(--danger-text); }
+
+  .ip-input-row { display: flex; gap: 8px; }
+
+  input[type=text] {
+    flex: 1;
+    padding: 7px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+  }
+
+  input[type=text]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(26,26,24,0.08); }
+
+  .btn {
+    padding: 7px 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+  }
+
+  .btn:hover { background: var(--bg); }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+
+  .btn-primary:hover { opacity: 0.85; }
+
+  .cat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 7px;
+  }
+
+  .cat-item {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 7px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text);
+    transition: border-color 0.1s, background 0.1s;
+    user-select: none;
+  }
+
+  .cat-item:hover { border-color: var(--border-strong); background: var(--bg); }
+
+  .cat-item.selected {
+    border-color: var(--info-border);
+    background: var(--info-bg);
+    color: var(--info-text);
+  }
+
+  .cat-check {
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid var(--border-strong);
+    border-radius: 3px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cat-item.selected .cat-check {
+    background: var(--info-text);
+    border-color: var(--info-text);
+  }
+
+  .cat-check-inner {
+    width: 8px;
+    height: 8px;
+    background: white;
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+    display: none;
+  }
+
+  .cat-item.selected .cat-check-inner { display: block; }
+
+  .save-bar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    background: var(--accent);
+    color: var(--accent-text);
+    padding: 10px 16px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    z-index: 999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 640px) {
+    .main { grid-template-columns: 1fr; padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title">J-ICAP <span>/ group manager</span></div>
+  <div class="topbar-badge">v1.0</div>
+</div>
+
+<div class="main">
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-header-label">Groups</span>
+        <button class="btn-icon" id="btn-add-group" title="Add group">+</button>
+      </div>
+      <div id="group-list"></div>
+      <div class="add-group-form" id="add-group-form">
+        <input type="text" id="new-group-name" placeholder="Group name" />
+        <button class="btn btn-primary" id="btn-confirm-add">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="panel">
+      <div class="panel-empty" id="panel-empty">Select a group to configure</div>
+      <div id="panel-content" style="display:none;">
+        <div class="panel-top">
+          <span class="panel-title" id="panel-title"></span>
+          <div class="threshold-row">
+            <span class="threshold-label">Block threshold</span>
+            <input type="range" min="50" max="1000" step="50" id="threshold-slider" />
+            <span class="threshold-val" id="threshold-val">400</span>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-label">IP addresses</div>
+          <div class="ip-list" id="ip-list"></div>
+          <div class="ip-input-row">
+            <input type="text" id="ip-input" placeholder="192.168.1.x" style="font-family: 'SF Mono', 'Fira Code', monospace;" />
+            <button class="btn" id="btn-add-ip">Add IP</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-label">Categories</div>
+          <div class="cat-grid" id="cat-grid"></div>
+        </div>
+
+        <div class="save-bar">
+          <button class="btn" id="btn-copy">Copy JSON</button>
+          <button class="btn btn-primary" id="btn-save">Save to server</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ALL_CATEGORIES = ['adult','gambling','drugs','illegaldrugs','weapons','violence','chat','games','proxies','nudism','pornography','gore','drugadvocacy','intolerance','warezhacking','kidstimewasting','personals','badwords'];
+
+let state = { groups: {}, selected: null };
+
+async function fetchConfig() {
+  try {
+    const r = await fetch('/api/config');
+    const data = await r.json();
+    state.groups = data.groups || {};
+    renderGroups();
+  } catch(e) {
+    showToast('Could not load config');
+  }
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function renderGroups() {
+  const list = document.getElementById('group-list');
+  list.innerHTML = '';
+  Object.entries(state.groups).forEach(([name, cfg]) => {
+    const div = document.createElement('div');
+    div.className = 'group-item' + (state.selected === name ? ' active' : '');
+    div.innerHTML = `
+      <div style="flex:1;min-width:0;cursor:pointer;">
+        <div class="group-name">${name}</div>
+        <div class="group-meta">${cfg.ips.length} IPs &middot; ${cfg.enabled_categories.length} categories</div>
+      </div>
+      <button class="btn-del" title="Delete group">&times;</button>
+    `;
+    div.querySelector('.group-name').parentElement.addEventListener('click', () => selectGroup(name));
+    div.querySelector('.btn-del').addEventListener('click', (e) => { e.stopPropagation(); deleteGroup(name); });
+    list.appendChild(div);
+  });
+}
+
+function selectGroup(name) {
+  state.selected = name;
+  renderGroups();
+  renderPanel();
+}
+
+function deleteGroup(name) {
+  if (!confirm(`Delete group "${name}"?`)) return;
+  delete state.groups[name];
+  if (state.selected === name) state.selected = null;
+  renderGroups();
+  renderPanel();
+}
+
+function renderPanel() {
+  const empty = document.getElementById('panel-empty');
+  const content = document.getElementById('panel-content');
+  if (!state.selected || !state.groups[state.selected]) {
+    empty.style.display = 'flex';
+    content.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  content.style.display = 'block';
+  const cfg = state.groups[state.selected];
+  document.getElementById('panel-title').textContent = state.selected;
+  document.getElementById('threshold-slider').value = cfg.block_threshold;
+  document.getElementById('threshold-val').textContent = cfg.block_threshold;
+  renderIPs();
+  renderCats();
+}
+
+function renderIPs() {
+  const cfg = state.groups[state.selected];
+  const list = document.getElementById('ip-list');
+  list.innerHTML = '';
+  cfg.ips.forEach(ip => {
+    const tag = document.createElement('div');
+    tag.className = 'ip-tag';
+    tag.innerHTML = `${ip}<button title="Remove">&times;</button>`;
+    tag.querySelector('button').addEventListener('click', () => {
+      cfg.ips = cfg.ips.filter(i => i !== ip);
+      renderIPs();
+      renderGroups();
+    });
+    list.appendChild(tag);
+  });
+}
+
+function renderCats() {
+  const cfg = state.groups[state.selected];
+  const grid = document.getElementById('cat-grid');
+  grid.innerHTML = '';
+  ALL_CATEGORIES.forEach(cat => {
+    const selected = cfg.enabled_categories.includes(cat);
+    const item = document.createElement('div');
+    item.className = 'cat-item' + (selected ? ' selected' : '');
+    item.innerHTML = `<div class="cat-check"><div class="cat-check-inner"></div></div><span>${cat}</span>`;
+    item.addEventListener('click', () => {
+      if (cfg.enabled_categories.includes(cat)) {
+        cfg.enabled_categories = cfg.enabled_categories.filter(c => c !== cat);
+      } else {
+        cfg.enabled_categories.push(cat);
+      }
+      renderCats();
+      renderGroups();
+    });
+    grid.appendChild(item);
+  });
+}
+
+document.getElementById('threshold-slider').addEventListener('input', (e) => {
+  document.getElementById('threshold-val').textContent = e.target.value;
+  if (state.selected) state.groups[state.selected].block_threshold = parseInt(e.target.value);
+});
+
+document.getElementById('btn-add-ip').addEventListener('click', () => {
+  const input = document.getElementById('ip-input');
+  const ip = input.value.trim();
+  if (!ip) return;
+  const cfg = state.groups[state.selected];
+  if (cfg.ips.includes(ip)) { showToast('IP already in group'); return; }
+  cfg.ips.push(ip);
+  input.value = '';
+  renderIPs();
+  renderGroups();
+});
+
+document.getElementById('ip-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btn-add-ip').click();
+});
+
+document.getElementById('btn-add-group').addEventListener('click', () => {
+  const form = document.getElementById('add-group-form');
+  form.classList.toggle('visible');
+  if (form.classList.contains('visible')) document.getElementById('new-group-name').focus();
+});
+
+document.getElementById('btn-confirm-add').addEventListener('click', () => {
+  const input = document.getElementById('new-group-name');
+  const name = input.value.trim();
+  if (!name) return;
+  if (state.groups[name]) { showToast('Group already exists'); return; }
+  state.groups[name] = { ips: [], block_threshold: 400, enabled_categories: [] };
+  input.value = '';
+  document.getElementById('add-group-form').classList.remove('visible');
+  renderGroups();
+  selectGroup(name);
+  showToast(`Created group "${name}"`);
+});
+
+document.getElementById('new-group-name').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btn-confirm-add').click();
+});
+
+function buildConfig() {
+  return { default: { block_threshold: 400, enabled_categories: [] }, groups: state.groups };
+}
+
+document.getElementById('btn-copy').addEventListener('click', () => {
+  navigator.clipboard.writeText(JSON.stringify(buildConfig(), null, 4))
+    .then(() => showToast('Copied to clipboard'))
+    .catch(() => showToast('Copy failed'));
+});
+
+document.getElementById('btn-save').addEventListener('click', async () => {
+  try {
+    const r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildConfig())
+    });
+    const data = await r.json();
+    if (data.status === 'ok') showToast('Saved and reloaded');
+    else showToast('Save failed');
+  } catch(e) {
+    showToast('Could not reach server');
+  }
+});
+
+fetchConfig();
+</script>
+</body>
+</html>

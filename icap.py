@@ -9,7 +9,7 @@ import re
 from pyicap import ICAPServer, BaseICAPRequestHandler
 import base64
 # --- Config ---
-CONFIG_DIR = "/home/jasper/pycap"
+CONFIG_DIR = "/home/jasper/J-ICAP"
 PHRASELIST_DIR = f"{CONFIG_DIR}/phraselist"
 DOMAINLIST_DIR = f"{CONFIG_DIR}/domainlist"
 CONFIG_FILE = f"{CONFIG_DIR}/config.json"
@@ -119,6 +119,14 @@ def load_e2guardian_list(filepath):
         print(f"[WARN] Could not read {filepath}: {e}")
     return phrases
 
+def get_client_ip(self):
+    # Try X-Client-IP header first (set by Squid when icap_send_client_ip is on)
+    print(f"[DEBUG] ICAP headers: {self.headers}")
+    x_client_ip = self.headers.get(b'x-client-ip', [b''])[0].decode('utf-8', errors='ignore')
+    if x_client_ip:
+        return x_client_ip
+    # Fall back to connection IP
+    return self.client_address[0]
 
 def build_automatons():
     global AUTOMATONS, GOOD_AUTOMATONS
@@ -128,7 +136,7 @@ def build_automatons():
     for category, keywords in KEYWORD_SCORES.items():
         A = ahocorasick.Automaton()
         for keyword, score in keywords.items():
-            print(f"[DEBUG] Adding keyword: '{keyword}' score: {score}")  # add this
+            #print(f"[DEBUG] Adding keyword: '{keyword}' score: {score}")  # add this
             A.add_word(keyword, (keyword, score))
         A.make_automaton()
         AUTOMATONS[category] = A
@@ -136,22 +144,32 @@ def build_automatons():
 
 CONFIG_FILE = f"{CONFIG_DIR}/config.json"
 
+GROUPS = {}
+DEFAULT_CONFIG = {}
+
 def load_config():
-    global KEYWORD_CATEGORIES, BLOCKED_URL_CATEGORIES, KEYWORD_SCORES, GOOD_SCORES, BLOCK_THRESHOLD, ENABLED_CATEGORIES
+    global KEYWORD_CATEGORIES, BLOCKED_URL_CATEGORIES, KEYWORD_SCORES, GOOD_SCORES
+    global BLOCK_THRESHOLD, ENABLED_CATEGORIES, GROUPS, DEFAULT_CONFIG
 
-
-    # Load main config
     try:
         with open(CONFIG_FILE) as f:
             config = json.load(f)
-            BLOCK_THRESHOLD = config.get("block_threshold", 100)
-            ENABLED_CATEGORIES = [c.lower() for c in config.get("enabled_categories", [])]
-            print(f"[INFO] Block threshold: {BLOCK_THRESHOLD}")
-            print(f"[INFO] Enabled categories: {ENABLED_CATEGORIES}")
+            DEFAULT_CONFIG = {
+                "block_threshold": config.get("default", {}).get("block_threshold", 100),
+                "enabled_categories": [c.lower() for c in config.get("default", {}).get("enabled_categories", [])]
+            }
+            GROUPS = {}
+            for group_name, group_cfg in config.get("groups", {}).items():
+                GROUPS[group_name] = {
+                    "ips": group_cfg.get("ips", []),
+                    "block_threshold": group_cfg.get("block_threshold", DEFAULT_CONFIG["block_threshold"]),
+                    "enabled_categories": [c.lower() for c in group_cfg.get("enabled_categories", [])]
+                }
+            print(f"[INFO] Loaded {len(GROUPS)} groups")
     except Exception as e:
-        print(f"[WARN] Could not read config.json, using defaults: {e}")
-        BLOCK_THRESHOLD = 100
-        ENABLED_CATEGORIES = []  # empty = all categories enabled
+        print(f"[WARN] Could not read config.json: {e}")
+        DEFAULT_CONFIG = {"block_threshold": 100, "enabled_categories": []}
+        GROUPS = {}
 
     KEYWORD_CATEGORIES = {}
     BLOCKED_URL_CATEGORIES = {}
@@ -160,11 +178,7 @@ def load_config():
 
     if os.path.exists(PHRASELIST_DIR):
         for category in os.listdir(PHRASELIST_DIR):
-            # Skip disabled categories
-            if ENABLED_CATEGORIES and category.lower() not in ENABLED_CATEGORIES:
-                print(f"[INFO] Skipping disabled category: {category}")
-                continue
-
+            
             category_path = os.path.join(PHRASELIST_DIR, category)
             if not os.path.isdir(category_path):
                 continue
@@ -186,7 +200,7 @@ def load_config():
                 KEYWORD_SCORES[category] = all_phrases
                 GOOD_SCORES[category] = good_phrases
                 print(f"[INFO] Loaded {len(all_phrases)} phrases and {len(good_phrases)} good phrases for category: {category}")
-                print(f"[DEBUG] Sample keywords for {category}: {list(KEYWORD_SCORES[category].keys())[:10]}")
+                # print(f"[DEBUG] Sample keywords for {category}: {list(KEYWORD_SCORES[category].keys())[:10]}")
 
 
     if os.path.exists(DOMAINLIST_DIR):
@@ -200,11 +214,18 @@ def load_config():
             domains = list(load_e2guardian_list(filepath).keys())
             if domains:
                 BLOCKED_URL_CATEGORIES[category] = domains
-                print(f"[INFO] Loaded {len(domains)} domains for category: {category}")
+                #print(f"[INFO] Loaded {len(domains)} domains for category: {category}")
 
     print(f"[INFO] Config reloaded - {len(KEYWORD_CATEGORIES)} keyword categories, {len(BLOCKED_URL_CATEGORIES)} URL categories")
     build_automatons()
 
+def get_group_config(client_ip):
+    for group_name, group_cfg in GROUPS.items():
+        if client_ip in group_cfg["ips"]:
+            print(f"[DEBUG] Client {client_ip} matched group: {group_name}")
+            return group_cfg
+    #print(f"[DEBUG] Client {client_ip} using default config")
+    return DEFAULT_CONFIG
 
 def is_whole_word_match(text, keyword, end_index):
     start_index = end_index - len(keyword) + 1
@@ -243,6 +264,14 @@ class KeywordFilter(BaseICAPRequestHandler):
         self.send_headers(False)
 
     def keyword_filter_REQMOD(self):
+        client_ip = get_client_ip(self)
+        group_cfg = get_group_config(client_ip)
+        block_threshold = group_cfg["block_threshold"]
+        enabled_categories = group_cfg["enabled_categories"]
+
+        print(f"[DEBUG] Client IP: {client_ip}")
+
+
         body = b""
         if self.has_body:
             while True:
@@ -252,13 +281,33 @@ class KeywordFilter(BaseICAPRequestHandler):
                 body += chunk
 
         url = self.enc_req_headers.get(b'host', [b''])[0].decode('utf-8', errors='ignore')
-        print(f"[DEBUG] REQMOD URL: {url}")
+        #print(f"[DEBUG] REQMOD URL: {url} | Client: {client_ip}")
+
+        # No group match - pass through without filtering
+        if enabled_categories is None:
+            #print(f"[DEBUG] Client {client_ip} not in any group - passing through")
+            self.set_icap_response(200)
+            self.set_enc_request(b" ".join(self.enc_req))
+            for header, values in self.enc_req_headers.items():
+                for val in values:
+                    self.set_enc_header(header, val)
+            self.send_headers(body != b"")
+            if body:
+                self.write_chunk(body)
+                self.write_chunk(b"")
+            return
 
         for category, urls in BLOCKED_URL_CATEGORIES.items():
+            if category.lower() not in enabled_categories:
+                continue
+
             for blocked in urls:
                 if blocked.lower() in url.lower():
-                    print(f"[BLOCKED REQUEST] Category: {category} | URL: {blocked}")
-                    block_page = URL_BLOCK_PAGE_TEMPLATE.format(category=category).encode()
+                    print(f"[BLOCKED REQUEST] Client: {client_ip} | Category: {category} | URL: {blocked}")
+                    block_page = URL_BLOCK_PAGE_TEMPLATE.format(
+                        category=category,
+                        url=url
+                    ).encode()
                     self.set_icap_response(200)
                     self.set_enc_status(b'HTTP/1.1 403 Forbidden')
                     self.set_enc_header(b'Content-Type', b'text/html')
@@ -280,8 +329,13 @@ class KeywordFilter(BaseICAPRequestHandler):
             self.write_chunk(b"")
 
     def keyword_filter_RESPMOD(self):
-        print(f"[DEBUG] has_body: {self.has_body}")
-        print(f"[DEBUG] enc_res_status: {self.enc_res_status}")
+        client_ip = get_client_ip(self)
+        group_cfg = get_group_config(client_ip)
+        block_threshold = group_cfg["block_threshold"]
+        enabled_categories = group_cfg["enabled_categories"]
+
+        #print(f"[DEBUG] has_body: {self.has_body}")
+        #print(f"[DEBUG] enc_res_status: {self.enc_res_status}")
 
         url = self.enc_req_headers.get(b'host', [b''])[0].decode('utf-8', errors='ignore')
 
@@ -299,26 +353,36 @@ class KeywordFilter(BaseICAPRequestHandler):
             self.send_headers(False)
             return
 
+        # No group match - pass through without filtering
+        if enabled_categories is None:
+            #print(f"[DEBUG] Client {client_ip} not in any group - passing through")
+            self.set_icap_response(204)
+            self.send_headers(False)
+            return
+
         content_type = self.enc_res_headers.get(
             b'content-type', [b''])[0].decode('utf-8', errors='ignore')
         content_encoding = self.enc_res_headers.get(
             b'content-encoding', [b''])[0].decode('utf-8', errors='ignore')
 
         # Decompress if gzip
+        decompressed = False
         if 'gzip' in content_encoding:
             try:
                 body = gzip.decompress(body)
-                print(f"[DEBUG] Decompressed body length: {len(body)}")
+                decompressed = True
+                #print(f"[DEBUG] Decompressed body length: {len(body)}")
             except Exception as e:
                 print(f"[DEBUG] Gzip decompress failed: {e}")
 
-        # Only scan HTML - this must be at the same level as the gzip block, not inside it
+        # Only scan HTML
         if 'text/html' in content_type:
             text = body.decode('utf-8', errors='ignore').lower()
 
-            print(f"[DEBUG] Automatons available: {list(AUTOMATONS.keys())}")
-
             for category, automaton in AUTOMATONS.items():
+                if category.lower() not in enabled_categories:
+                    continue
+
                 total_score = 0
                 matched_keywords = []
                 matched_good = []
@@ -336,10 +400,10 @@ class KeywordFilter(BaseICAPRequestHandler):
                         total_score -= score
                         matched_good.append(f"{keyword} (-{score})")
 
-                print(f"[DEBUG] Category: {category} | Score: {total_score} | Bad: {matched_keywords[:5]} | Good: {matched_good[:5]}")
+                #print(f"[DEBUG] Client: {client_ip} | Category: {category} | Score: {total_score} | Threshold: {block_threshold} | Bad: {matched_keywords[:5]} | Good: {matched_good[:5]}")
 
-                if total_score >= BLOCK_THRESHOLD:
-                    print(f"[BLOCKED] Category: {category} | Score: {total_score}")
+                if total_score >= block_threshold:
+                    print(f"[BLOCKED] Client: {client_ip} | Category: {category} | Score: {total_score}")
                     block_page = BLOCK_PAGE_TEMPLATE.format(
                         category=category,
                         keyword=", ".join(matched_keywords[:10]),
@@ -354,22 +418,21 @@ class KeywordFilter(BaseICAPRequestHandler):
                     self.write_chunk(b"")
                     return
 
-
         # Pass through - update content-length since we decompressed
         self.set_icap_response(200)
         self.set_enc_status(b" ".join(self.enc_res_status))
         for header, values in self.enc_res_headers.items():
-            if header == b'content-encoding':
+            if decompressed and header == b'content-encoding':
                 continue
-            if header == b'content-length':
+            if decompressed and header == b'content-length':
                 continue
             for val in values:
                 self.set_enc_header(header, val)
-        self.set_enc_header(b'content-length', str(len(body)).encode())
+        if decompressed:
+            self.set_enc_header(b'content-length', str(len(body)).encode())
         self.send_headers(True)
         self.write_chunk(body)
         self.write_chunk(b"")
-
 
 class ThreadedICAPServer(socketserver.ThreadingMixIn, ICAPServer):
     pass
