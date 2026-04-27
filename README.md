@@ -26,4 +26,17 @@ And download the signatures
 ```bash
 sudo systemctl stop clamav-freshclam
 sudo freshclam
-sudo systemctl start clamav-freshclam```
+sudo systemctl start clamav-freshclam
+```
+
+Start the ClamAV daemon
+```bash
+sudo systemctl start clamav-daemon
+sudo systemctl enable clamav-daemon
+```
+
+Fix a package by doing
+
+```bash
+sudo sed -i 's/collections\.Callable/collections.abc.Callable/g' ~/J-ICAP/venv/lib/python3.12/site-packages/pyicap.py
+```

@@ -11,10 +11,12 @@
                 "gambling",
                 "weapons",
                 "games",
-                "chat"
+                "chat",
+                "kidstimewasting"
             ],
             "ips": [
-                "192.168.10.20"
+                "192.168.10.20",
+                "192.168.11.53"
             ]
         },
         "teachers": {
