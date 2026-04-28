@@ -1,13 +1,20 @@
 [Unit]
-Description=J-ICAP Web GUI
+Description=CIRNO-ICAP Web Management Interface
 After=network.target
 
 [Service]
-ExecStart=~/CIRNO-ICAP/venv/bin/python3 ~/CIRNO-ICAP/webgui/app.py
+# The install.sh script will automatically inject User=cirno and Group=cirno here.
+# It will also replace %h/CIRNO-ICAP with /opt/CIRNO-ICAP.
+
+WorkingDirectory=%h/CIRNO-ICAP
+ExecStart=%h/CIRNO-ICAP/venv/bin/python3 %h/CIRNO-ICAP/webgui/app.py
+
+# Ensures the service restarts if the Flask app crashes
 Restart=always
 RestartSec=3
-User=jasper
-WorkingDirectory=~/CIRNO-ICAP
+
+# Environment variables can be added here if needed (e.g., FLASK_ENV=production)
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target

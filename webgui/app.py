@@ -7,20 +7,23 @@ from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
 
-CONFIG_DIR = "/home/jasper/J-ICAP"
+CONFIG_DIR = "/opt/CIRNO-ICAP"
 CONFIG_FILE = f"{CONFIG_DIR}/config.json"
 PHRASELIST_DIR = f"{CONFIG_DIR}/phraselist"
 
 def read_config():
-    with open(CONFIG_FILE) as f:
-        return json.load(f)
+    try:
+        with open(CONFIG_FILE) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"groups": {}}
 
 def write_config(config):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=4)
 
 def reload_icap():
-    subprocess.run(["sudo", "systemctl", "kill", "-s", "USR1", "jicap"])
+    subprocess.run(["sudo", "/usr/bin/systemctl", "kill", "-s", "USR1", "CIRNO-ICAP"])
 
 # --- Config ---
 
@@ -34,7 +37,14 @@ def get_config():
 
 @app.route('/api/config', methods=['POST'])
 def save_config():
-    write_config(request.json)
+    existing = read_config()
+    incoming = request.json
+    
+    # Only update the keys the GUI manages, preserve everything else
+    existing['default'] = incoming.get('default', existing.get('default', {}))
+    existing['groups'] = incoming.get('groups', existing.get('groups', {}))
+    
+    write_config(existing)
     reload_icap()
     return jsonify({"status": "ok"})
 

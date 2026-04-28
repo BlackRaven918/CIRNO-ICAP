@@ -15,7 +15,7 @@ import email as email_lib
 from pyicap import ICAPServer, BaseICAPRequestHandler
 import base64
 # --- Config ---
-CONFIG_DIR = "/home/jasper/J-ICAP"
+CONFIG_DIR = "/opt/CIRNO-ICAP"
 PHRASELIST_DIR = f"{CONFIG_DIR}/phraselist"
 DOMAINLIST_DIR = f"{CONFIG_DIR}/domainlist"
 CONFIG_FILE = f"{CONFIG_DIR}/config.json"

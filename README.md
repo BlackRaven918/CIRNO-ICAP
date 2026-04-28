@@ -11,9 +11,9 @@ CIRNO-ICAP is an ICAP server that can inspect web traffic received from proxies 
 
 ## Install guide
 
-To install this server, you need to clone this repository to your machine. Then you need to create a virtual environment in the root directory of this repository: `python -m venv venv`. After that you need to activatte the virtual environment.
+To install this server, you need to clone this repository to your machine. Then you need to create a virtual environment in the root directory of this repository: `python3 -m venv venv`. After that you need to activatte the virtual environment.
 Linux: `source venv/bin/activate` .
-Then you need to install the required packages with `pip install -r requirements.txt`
+Then you need to install the required packages with `pip install -r requirements.txt` or if neccessary `pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt`.
 
 After that you need to install the ClamAV daemon on your server.
 ```bash
@@ -38,14 +38,14 @@ sudo systemctl enable clamav-daemon
 Fix a package by doing
 
 ```bash
-sudo sed -i 's/collections\.Callable/collections.abc.Callable/g' ~/J-ICAP/venv/lib/python3.12/site-packages/pyicap.py
+sudo sed -i 's/collections\.Callable/collections.abc.Callable/g' ~/CIRNO-ICAP/venv/lib/python3.12/site-packages/pyicap.py
 ```
 
 Add CIRNO-ICAP and the web gui as a service.
 
 ```bash
-mv ./CIRNO-ICAP.service /etc/systemd/system/
-mv ./CIRNO-ICAP-gui.service /etc/systemd/system/
+sudo cp ./services/CIRNO-ICAP.service /etc/systemd/system/
+sudo cp ./services/CIRNO-ICAP-gui.service /etc/systemd/system/
 ```
 
 

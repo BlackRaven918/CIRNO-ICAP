@@ -1,13 +1,21 @@
 [Unit]
-Description=J-ICAP Keyword Filter
-After=network.target
+Description=CIRNO-ICAP Keyword Filter
+After=network.target clamav-daemon.service
 
 [Service]
-ExecStart=~/CIRNO-ICAP/venv/bin/python3 ~/CIRNO-ICAP/icap.py
+# Create a user named 'cirno' and point this to /opt/CIRNO-ICAP
+User=cirno
+Group=cirno
+WorkingDirectory=/opt/CIRNO-ICAP
+ExecStart=/opt/CIRNO-ICAP/venv/bin/python3 /opt/CIRNO-ICAP/icap.py
+
+# Security hardening (optional but good)
+ProtectSystem=full
+PrivateTmp=true
+
 Restart=always
 RestartSec=3
-User=jasper
-WorkingDirectory=~/CIRNO-ICAP
 
 [Install]
+# multi-user.target is the standard for servers
 WantedBy=multi-user.target
