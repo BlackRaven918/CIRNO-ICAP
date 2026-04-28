@@ -1,0 +1,13 @@
+[Unit]
+Description=J-ICAP Web GUI
+After=network.target
+
+[Service]
+ExecStart=~/CIRNO-ICAP/venv/bin/python3 ~/CIRNO-ICAP/webgui/app.py
+Restart=always
+RestartSec=3
+User=jasper
+WorkingDirectory=~/CIRNO-ICAP
+
+[Install]
+WantedBy=multi-user.target

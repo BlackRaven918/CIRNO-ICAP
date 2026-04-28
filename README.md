@@ -40,3 +40,19 @@ Fix a package by doing
 ```bash
 sudo sed -i 's/collections\.Callable/collections.abc.Callable/g' ~/J-ICAP/venv/lib/python3.12/site-packages/pyicap.py
 ```
+
+Add CIRNO-ICAP and the web gui as a service.
+
+```bash
+mv ./CIRNO-ICAP.service /etc/systemd/system/
+mv ./CIRNO-ICAP-gui.service /etc/systemd/system/
+```
+
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable CIRNO-ICAP
+sudo systemctl enable CIRNO-ICAP-gui
+sudo systemctl start CIRNO-ICAP
+sudo systemctl start CIRNO-ICAP-gui
+```
