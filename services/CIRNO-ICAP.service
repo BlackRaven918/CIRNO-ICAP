@@ -7,7 +7,7 @@ After=network.target clamav-daemon.service
 User=cirno
 Group=cirno
 WorkingDirectory=/opt/CIRNO-ICAP
-ExecStart=/opt/CIRNO-ICAP/venv/bin/python3 /opt/CIRNO-ICAP/icap.py
+ExecStart=/opt/CIRNO-ICAP/venv/bin/python3 -u /opt/CIRNO-ICAP/icap.py
 
 # Security hardening (optional but good)
 ProtectSystem=full

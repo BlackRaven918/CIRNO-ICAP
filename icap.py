@@ -273,6 +273,8 @@ def scan_for_dlp(body, content_type):
         if 'application/x-www-form-urlencoded' in content_type:
             from urllib.parse import unquote_plus
             texts_to_scan.append(unquote_plus(body.decode('utf-8', errors='ignore')))
+        
+        
 
         elif 'multipart/form-data' in content_type:
             parts = parse_multipart(body, content_type)
@@ -291,7 +293,7 @@ def scan_for_dlp(body, content_type):
                     if cd is not None:
                         status, reason = scan_with_clamav(content)
                         if status == 'FOUND':
-                            print(f"[DLP] Virus in upload: {reason} | file: {filename}")
+                            # print(f"[DLP] Virus in upload: {reason} | file: {filename}")
                             findings.append(f"Virus: {reason} in {filename}")
 
                     # Try to read as text for keyword/pattern scanning
@@ -307,17 +309,16 @@ def scan_for_dlp(body, content_type):
                 else:
                     # Form field
                     texts_to_scan.append(content.decode('utf-8', errors='ignore'))
-
-        elif 'application/json' in content_type:
+        elif 'multipart/related' in content_type or 'multipart/form-data' in content_type:
+                    parts = parse_multipart(body, content_type)
+        elif 'application/json' in content_type or 'protobuf' in content_type:
             try:
                 import json
                 data = json.loads(body.decode('utf-8', errors='ignore'))
                 texts_to_scan.append(decode_body_recursive(data))
             except:
+                # protobuf fallback - just scan raw bytes as text
                 texts_to_scan.append(body.decode('utf-8', errors='ignore'))
-
-        else:
-            texts_to_scan.append(body.decode('utf-8', errors='ignore'))
 
     except Exception as e:
         print(f"[DLP] Parse error: {e}")
@@ -469,6 +470,10 @@ signal.signal(signal.SIGUSR1, lambda sig, frame: load_config())
 
 class KeywordFilter(BaseICAPRequestHandler):
 
+    def log_message(self, format, *args):
+        """Override to prevent printing access logs to the console/systemd."""
+        pass
+
     def handle(self):
         try:
             super().handle()
@@ -539,7 +544,8 @@ class KeywordFilter(BaseICAPRequestHandler):
                     return
 
         # DLP scanning on POST requests to upload domains
-        if DLP_CONFIG.get("enabled") and method == 'POST' and body:
+        if DLP_CONFIG.get("enabled") and method in ('POST', 'PUT', 'PATCH') and body:
+            print(f"[DLP DEBUG] {method} to {url} | content-type: {content_type} | size: {len(body)}")
             is_upload_domain = any(
                 d in url.lower() for d in DLP_CONFIG["blocked_upload_domains"]
             )
@@ -626,7 +632,7 @@ class KeywordFilter(BaseICAPRequestHandler):
         #print(f"[DEBUG] content-type: {content_type} | body size: {len(body)}")
 
 
-        print(f"[DEBUG] content-type for ClamAV check: {content_type}")
+        # print(f"[DEBUG] content-type for ClamAV check: {content_type}")
 
         should_scan = body and cd is not None and not any(ct in content_type for ct in SKIP_SCAN_TYPES)
 
@@ -679,7 +685,7 @@ class KeywordFilter(BaseICAPRequestHandler):
                 #print(f"[DEBUG] Client: {client_ip} | Category: {category} | Score: {total_score} | Threshold: {block_threshold} | Bad: {matched_keywords[:5]} | Good: {matched_good[:5]}")
 
                 if total_score >= block_threshold:
-                    #print(f"[BLOCKED] Client: {client_ip} | Category: {category} | Score: {total_score}")
+                    print(f"[BLOCKED] Client: {client_ip} | Category: {category} | Score: {total_score}")
                     block_page = BLOCK_PAGE_TEMPLATE.format(
                         category=category,
                         keyword=", ".join(matched_keywords[:10]),

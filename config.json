@@ -15,8 +15,7 @@
                 "kidstimewasting"
             ],
             "ips": [
-                "192.168.10.20",
-                "192.168.11.53"
+                "192.168.10.20"
             ]
         },
         "teachers": {
@@ -25,7 +24,8 @@
                 "gambling"
             ],
             "ips": [
-                "192.168.11.211"
+                "192.168.11.211",
+                "192.168.11.53"
             ]
         }
     },
@@ -40,7 +40,11 @@
             "outlook.office.com",
             "mail.yahoo.com",
             "send.gmail.com",
-            "192.168.10.122:9999"
+            "192.168.10.122:9999",
+            "192.168.10.149:9999",
+            "clients6.google.com",
+            "drivefrontend-pa.clients6.google.com",
+            "upload.googleapis.com"
         ],
         "patterns": {
             "Credit Card": ["\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\\b"],
