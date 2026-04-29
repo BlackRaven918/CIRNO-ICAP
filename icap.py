@@ -191,19 +191,22 @@ def load_config():
             config = json.load(f)
             DEFAULT_CONFIG = {
                 "block_threshold": config.get("default", {}).get("block_threshold", 100),
-                "enabled_categories": [c.lower() for c in config.get("default", {}).get("enabled_categories", [])]
+                "enabled_categories": [c.lower() for c in config.get("default", {}).get("enabled_categories", [])],
+                "google_safe_search": config.get("google_safe_search",False)
             }
             GROUPS = {}
             for group_name, group_cfg in config.get("groups", {}).items():
                 GROUPS[group_name] = {
                     "ips": group_cfg.get("ips", []),
                     "block_threshold": group_cfg.get("block_threshold", DEFAULT_CONFIG["block_threshold"]),
-                    "enabled_categories": [c.lower() for c in group_cfg.get("enabled_categories", [])]
+                    "enabled_categories": [c.lower() for c in group_cfg.get("enabled_categories", [])],
+                    "google_safe_search": config.get("google_safe_search",False)
+
                 }
             #print(f"[INFO] Loaded {len(GROUPS)} groups")
     except Exception as e:
         print(f"[WARN] Could not read config.json: {e}")
-        DEFAULT_CONFIG = {"block_threshold": 100, "enabled_categories": []}
+        DEFAULT_CONFIG = {"block_threshold": 100, "enabled_categories": [],"google_safe_search":False}
         GROUPS = {}
 
     KEYWORD_CATEGORIES = {}
@@ -519,6 +522,15 @@ class KeywordFilter(BaseICAPRequestHandler):
                     self.set_enc_header(header, val)
             self.set_enc_header(b'cache-control', b'no-cache')
             self.set_enc_header(b'pragma', b'no-cache')
+            if any(g in url.lower() for g in ['www.google.com', 'google.com', 'google.be']):
+                self.set_enc_header(b'X-Restrict-Google-Family-Content', b'1')
+            if 'bing.com' in url.lower():
+                self.set_enc_header(b'X-MSEdge-SafeSearch', b'strict')
+
+        # YouTube restrictions
+            if 'youtube.com' in url.lower() or 'youtubei.googleapis.com' in url.lower():
+                self.set_enc_header(b'YouTube-Restrict', b'Strict')
+
             self.send_headers(body != b"")
             if body:
                 self.write_chunk(body)
@@ -577,6 +589,15 @@ class KeywordFilter(BaseICAPRequestHandler):
                 self.set_enc_header(header, val)
         self.set_enc_header(b'cache-control', b'no-cache')
         self.set_enc_header(b'pragma', b'no-cache')
+        if any(g in url.lower() for g in ['www.google.com', 'google.com', 'google.be']):
+            self.set_enc_header(b'X-Restrict-Google-Family-Content', b'1')
+        if 'bing.com' in url.lower():
+            self.set_enc_header(b'X-MSEdge-SafeSearch', b'strict')
+        if 'youtube.com' in url.lower() or 'youtubei.googleapis.com' in url.lower():
+            self.set_enc_header(b'YouTube-Restrict', b'Strict')
+
+
+
         self.send_headers(body != b"")
         if body:
             self.write_chunk(body)

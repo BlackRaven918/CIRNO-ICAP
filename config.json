@@ -1,7 +1,8 @@
 {
     "default": {
         "block_threshold": 400,
-        "enabled_categories": []
+        "enabled_categories": [],
+        "google_safe_search": false
     },
     "groups": {
         "students": {
@@ -16,7 +17,8 @@
             ],
             "ips": [
                 "192.168.10.20"
-            ]
+            ],
+            "google_safe_search": false
         },
         "teachers": {
             "block_threshold": 400,
@@ -26,7 +28,8 @@
             "ips": [
                 "192.168.11.211",
                 "192.168.11.53"
-            ]
+            ],
+            "google_safe_search": true
         }
     },
     "dlp": {
@@ -44,7 +47,8 @@
             "192.168.10.149:9999",
             "clients6.google.com",
             "drivefrontend-pa.clients6.google.com",
-            "upload.googleapis.com"
+            "upload.googleapis.com",
+            "dlptest.com"
         ],
         "patterns": {
             "Credit Card": ["\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\\b"],
@@ -54,5 +58,11 @@
             "Password Field": ["password=([^&]+)", "passwd=([^&]+)"]
         },
         "custom_keywords": ["confidential", "top secret", "internal only", "do not share"]
+    },
+    "safe_search": {
+        "enabled": true,
+        "safe_search_domains": [
+
+        ]
     }
 }
