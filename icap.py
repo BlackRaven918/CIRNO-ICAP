@@ -184,46 +184,61 @@ DEFAULT_CONFIG = {}
 
 def load_config():
     global KEYWORD_CATEGORIES, BLOCKED_URL_CATEGORIES, KEYWORD_SCORES, GOOD_SCORES
-    global BLOCK_THRESHOLD, ENABLED_CATEGORIES, GROUPS, DEFAULT_CONFIG, DLP_CONFIG, DLP_PATTERNS
+    global GROUPS, DLP_CONFIG, DLP_PATTERNS, SAFE_SEARCH_CONFIG
 
     try:
         with open(CONFIG_FILE) as f:
             config = json.load(f)
-            DEFAULT_CONFIG = {
-                "block_threshold": config.get("default", {}).get("block_threshold", 100),
-                "enabled_categories": [c.lower() for c in config.get("default", {}).get("enabled_categories", [])],
-                "google_safe_search": config.get("google_safe_search",False)
-            }
-            GROUPS = {}
-            for group_name, group_cfg in config.get("groups", {}).items():
-                GROUPS[group_name] = {
-                    "ips": group_cfg.get("ips", []),
-                    "block_threshold": group_cfg.get("block_threshold", DEFAULT_CONFIG["block_threshold"]),
-                    "enabled_categories": [c.lower() for c in group_cfg.get("enabled_categories", [])],
-                    "google_safe_search": config.get("google_safe_search",False)
 
-                }
-            #print(f"[INFO] Loaded {len(GROUPS)} groups")
+        # Load groups from web_filter section
+        web_filter = config.get("web_filter", {})
+        raw_groups = web_filter.get("groups", {})
+        GROUPS = {}
+        for name, cfg in raw_groups.items():
+            GROUPS[name] = {
+                "ips": cfg.get("ips", []),
+                "block_threshold": cfg.get("block_threshold", 100),
+                "enabled_categories": [c.lower() for c in cfg.get("enabled_categories", [])],
+                "google_safe_search": cfg.get("google_safe_search", False)
+            }
+        print(f"[INFO] Loaded {len(GROUPS)} groups: {list(GROUPS.keys())}")
+
+        # Load DLP
+        dlp = config.get("dlp", {})
+        DLP_CONFIG = {
+            "enabled": dlp.get("enabled", False),
+            "blocked_upload_domains": [d.lower() for d in dlp.get("blocked_upload_domains", [])],
+            "custom_keywords": [k.lower() for k in dlp.get("custom_keywords", [])]
+        }
+        DLP_PATTERNS = {}
+        for category, patterns in dlp.get("patterns", {}).items():
+            DLP_PATTERNS[category] = [re.compile(p) for p in patterns]
+        print(f"[INFO] DLP loaded - {len(DLP_PATTERNS)} pattern categories, {len(DLP_CONFIG['blocked_upload_domains'])} upload domains")
+
+        # Load safe search
+        SAFE_SEARCH_CONFIG = config.get("safe_search", {"enabled": False, "safe_search_domains": []})
+        print(f"[INFO] Safe search enabled: {SAFE_SEARCH_CONFIG.get('enabled')}")
+
     except Exception as e:
         print(f"[WARN] Could not read config.json: {e}")
-        DEFAULT_CONFIG = {"block_threshold": 100, "enabled_categories": [],"google_safe_search":False}
         GROUPS = {}
+        DLP_CONFIG = {"enabled": False, "blocked_upload_domains": [], "custom_keywords": []}
+        DLP_PATTERNS = {}
+        SAFE_SEARCH_CONFIG = {"enabled": False}
 
+    # Load phraselists
     KEYWORD_CATEGORIES = {}
-    BLOCKED_URL_CATEGORIES = {}
     KEYWORD_SCORES = {}
     GOOD_SCORES = {}
+    BLOCKED_URL_CATEGORIES = {}
 
     if os.path.exists(PHRASELIST_DIR):
         for category in os.listdir(PHRASELIST_DIR):
-            
             category_path = os.path.join(PHRASELIST_DIR, category)
             if not os.path.isdir(category_path):
                 continue
-
             all_phrases = {}
             good_phrases = {}
-
             for filename in os.listdir(category_path):
                 filepath = os.path.join(category_path, filename)
                 if not os.path.isfile(filepath):
@@ -232,14 +247,11 @@ def load_config():
                     good_phrases.update(load_e2guardian_list(filepath))
                 else:
                     all_phrases.update(load_e2guardian_list(filepath))
-
             if all_phrases:
                 KEYWORD_CATEGORIES[category] = list(all_phrases.keys())
                 KEYWORD_SCORES[category] = all_phrases
                 GOOD_SCORES[category] = good_phrases
-                #print(f"[INFO] Loaded {len(all_phrases)} phrases and {len(good_phrases)} good phrases for category: {category}")
-                # print(f"[DEBUG] Sample keywords for {category}: {list(KEYWORD_SCORES[category].keys())[:10]}")
-
+                print(f"[INFO] Loaded {len(all_phrases)} phrases and {len(good_phrases)} good phrases for category: {category}")
 
     if os.path.exists(DOMAINLIST_DIR):
         for filename in os.listdir(DOMAINLIST_DIR):
@@ -247,25 +259,12 @@ def load_config():
             if not os.path.isfile(filepath):
                 continue
             category = filename.replace('banned', '').replace('domains', '').replace('list', '').strip('_').title()
-            if ENABLED_CATEGORIES and category.lower() not in ENABLED_CATEGORIES:
-                continue
             domains = list(load_e2guardian_list(filepath).keys())
             if domains:
                 BLOCKED_URL_CATEGORIES[category] = domains
-                #print(f"[INFO] Loaded {len(domains)} domains for category: {category}")
+                print(f"[INFO] Loaded {len(domains)} domains for category: {category}")
 
-    dlp = config.get("dlp", {})
-    DLP_CONFIG = {
-        "enabled": dlp.get("enabled", False),
-        "blocked_upload_domains": [d.lower() for d in dlp.get("blocked_upload_domains", [])],
-        "custom_keywords": [k.lower() for k in dlp.get("custom_keywords", [])]
-    }
-    DLP_PATTERNS = {}
-    for category, patterns in dlp.get("patterns", {}).items():
-        DLP_PATTERNS[category] = [re.compile(p) for p in patterns]
-    print(f"[INFO] DLP loaded - {len(DLP_PATTERNS)} pattern categories, {len(DLP_CONFIG['blocked_upload_domains'])} upload domains")
-
-    #print(f"[INFO] Config reloaded - {len(KEYWORD_CATEGORIES)} keyword categories, {len(BLOCKED_URL_CATEGORIES)} URL categories")
+    print(f"[INFO] Config reloaded - {len(KEYWORD_CATEGORIES)} keyword categories, {len(BLOCKED_URL_CATEGORIES)} URL categories")
     build_automatons()
 
 def scan_for_dlp(body, content_type):
@@ -313,7 +312,7 @@ def scan_for_dlp(body, content_type):
                     # Form field
                     texts_to_scan.append(content.decode('utf-8', errors='ignore'))
         elif 'multipart/related' in content_type or 'multipart/form-data' in content_type:
-                    parts = parse_multipart(body, content_type)
+            parts = parse_multipart(body, content_type)
         elif 'application/json' in content_type or 'protobuf' in content_type:
             try:
                 import json
@@ -371,12 +370,22 @@ def decode_body_recursive(obj):
     return text
 
 def get_group_config(client_ip):
+    # Check specific groups first (skip default)
     for group_name, group_cfg in GROUPS.items():
-        if client_ip in group_cfg["ips"]:
-            #print(f"[DEBUG] Client {client_ip} matched group: {group_name}")
+        if group_name == 'default':
+            continue
+        if client_ip in group_cfg.get("ips", []):
+            print(f"[DEBUG] Client {client_ip} matched group: {group_name}")
             return group_cfg
-    #print(f"[DEBUG] Client {client_ip} using default config")
-    return DEFAULT_CONFIG
+
+    # Fall back to default group if it exists
+    if 'default' in GROUPS:
+        print(f"[DEBUG] Client {client_ip} using default group")
+        return GROUPS['default']
+
+    # No default group - pass through without filtering
+    print(f"[DEBUG] Client {client_ip} not in any group - passing through")
+    return {"ips": [], "block_threshold": 100, "enabled_categories": None, "google_safe_search": False}
 
 def is_whole_word_match(text, keyword, end_index):
     start_index = end_index - len(keyword) + 1
@@ -522,14 +531,15 @@ class KeywordFilter(BaseICAPRequestHandler):
                     self.set_enc_header(header, val)
             self.set_enc_header(b'cache-control', b'no-cache')
             self.set_enc_header(b'pragma', b'no-cache')
-            if any(g in url.lower() for g in ['www.google.com', 'google.com', 'google.be']):
-                self.set_enc_header(b'X-Restrict-Google-Family-Content', b'1')
-            if 'bing.com' in url.lower():
-                self.set_enc_header(b'X-MSEdge-SafeSearch', b'strict')
-
-        # YouTube restrictions
-            if 'youtube.com' in url.lower() or 'youtubei.googleapis.com' in url.lower():
-                self.set_enc_header(b'YouTube-Restrict', b'Strict')
+            # Safe search enforcement per group
+            if SAFE_SEARCH_CONFIG.get("enabled") and group_cfg.get("google_safe_search"):
+                if any(g in url.lower() for g in ['www.google.com', 'google.com', 'google.be', 'www.google.be']):
+                    self.set_enc_header(b'X-Restrict-Google-Family-Content', b'1')
+                    print(f"[SAFE SEARCH] Injected Google safe search for {client_ip}")
+                if 'bing.com' in url.lower():
+                    self.set_enc_header(b'X-MSEdge-SafeSearch', b'strict')
+                if 'youtube.com' in url.lower() or 'youtubei.googleapis.com' in url.lower():
+                    self.set_enc_header(b'YouTube-Restrict', b'Strict')
 
             self.send_headers(body != b"")
             if body:
@@ -589,12 +599,15 @@ class KeywordFilter(BaseICAPRequestHandler):
                 self.set_enc_header(header, val)
         self.set_enc_header(b'cache-control', b'no-cache')
         self.set_enc_header(b'pragma', b'no-cache')
-        if any(g in url.lower() for g in ['www.google.com', 'google.com', 'google.be']):
-            self.set_enc_header(b'X-Restrict-Google-Family-Content', b'1')
-        if 'bing.com' in url.lower():
-            self.set_enc_header(b'X-MSEdge-SafeSearch', b'strict')
-        if 'youtube.com' in url.lower() or 'youtubei.googleapis.com' in url.lower():
-            self.set_enc_header(b'YouTube-Restrict', b'Strict')
+        # Safe search enforcement per group
+        if SAFE_SEARCH_CONFIG.get("enabled") and group_cfg.get("google_safe_search"):
+            if any(g in url.lower() for g in ['www.google.com', 'google.com', 'google.be', 'www.google.be']):
+                self.set_enc_header(b'X-Restrict-Google-Family-Content', b'1')
+                print(f"[SAFE SEARCH] Injected Google safe search for {client_ip}")
+            if 'bing.com' in url.lower():
+                self.set_enc_header(b'X-MSEdge-SafeSearch', b'strict')
+            if 'youtube.com' in url.lower() or 'youtubei.googleapis.com' in url.lower():
+                self.set_enc_header(b'YouTube-Restrict', b'Strict')
 
 
 
@@ -739,7 +752,6 @@ class KeywordFilter(BaseICAPRequestHandler):
 
 class ThreadedICAPServer(socketserver.ThreadingMixIn, ICAPServer):
     pass
-
 
 if __name__ == '__main__':
     server = ThreadedICAPServer(('0.0.0.0', 1344), KeywordFilter)

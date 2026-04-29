@@ -11,12 +11,9 @@ CONFIG_DIR = "/opt/CIRNO-ICAP"
 CONFIG_FILE = f"{CONFIG_DIR}/config.json"
 PHRASELIST_DIR = f"{CONFIG_DIR}/phraselist"
 
-def read_config():
-    try:
-        with open(CONFIG_FILE) as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {"groups": {}}
+def read_config():    
+    with open(CONFIG_FILE) as f:
+        return json.load(f)
 
 def write_config(config):
     with open(CONFIG_FILE, 'w') as f:
@@ -35,15 +32,22 @@ def index():
 def get_config():
     return jsonify(read_config())
 
+
 @app.route('/api/config', methods=['POST'])
 def save_config():
     existing = read_config()
     incoming = request.json
-    
-    # Only update the keys the GUI manages, preserve everything else
-    existing['default'] = incoming.get('default', existing.get('default', {}))
-    existing['groups'] = incoming.get('groups', existing.get('groups', {}))
-    
+    # Only update web_filter groups, preserve dlp and safe_search
+    existing['web_filter'] = existing.get('web_filter', {})
+    existing['web_filter']['groups'] = incoming.get('web_filter', {}).get('groups', existing['web_filter'].get('groups', {}))
+    write_config(existing)
+    reload_icap()
+    return jsonify({"status": "ok"})
+
+@app.route('/api/config/dlp', methods=['POST'])
+def save_dlp():
+    existing = read_config()
+    existing['dlp'] = request.json
     write_config(existing)
     reload_icap()
     return jsonify({"status": "ok"})
@@ -51,7 +55,8 @@ def save_config():
 # --- Groups ---
 @app.route('/api/groups', methods=['GET'])
 def get_groups():
-    return jsonify(read_config().get("groups", {}))
+    config = read_config()
+    return jsonify(config.get('web_filter', {}).get('groups', {}))
 
 @app.route('/api/groups/<name>', methods=['POST'])
 def save_group(name):

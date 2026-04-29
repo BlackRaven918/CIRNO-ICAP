@@ -22,6 +22,8 @@
     --info-border: #b5d4f4;
     --danger-text: #a32d2d;
     --danger-bg: #fcebeb;
+    --success-bg: #e6f7ee;
+    --success-text: #1a7a3f;
     --radius: 8px;
     --radius-lg: 12px;
   }
@@ -43,18 +45,15 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
   }
 
-  .topbar-title {
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-  }
+  .topbar-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .topbar-title span { color: var(--text-muted); font-weight: 400; }
 
-  .topbar-title span {
-    color: var(--text-muted);
-    font-weight: 400;
-  }
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
 
   .topbar-badge {
     font-size: 11px;
@@ -65,15 +64,50 @@
     padding: 2px 10px;
   }
 
-  .main {
-    max-width: 1000px;
+  .nav-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 1.5rem 2rem 0;
+    max-width: 1100px;
     margin: 0 auto;
-    padding: 2rem;
+  }
+
+  .nav-tab {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    background: var(--bg);
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .nav-tab.active {
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 2rem 2rem;
+  }
+
+  .main-groups {
     display: grid;
     grid-template-columns: 220px 1fr;
     gap: 16px;
     align-items: start;
+    padding-top: 1.5rem;
   }
+
+  .main-dlp { padding-top: 1.5rem; display: flex; flex-direction: column; gap: 16px; }
 
   .card {
     background: var(--surface);
@@ -97,6 +131,8 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
+
+  .card-body { padding: 1.25rem; }
 
   .btn-icon {
     width: 26px;
@@ -127,12 +163,7 @@
 
   .group-item:last-child { border-bottom: none; }
   .group-item:hover { background: var(--bg); }
-
-  .group-item.active {
-    background: var(--info-bg);
-    border-left: 3px solid var(--info-text);
-  }
-
+  .group-item.active { background: var(--info-bg); border-left: 3px solid var(--info-text); }
   .group-item.active .group-name { color: var(--info-text); }
 
   .group-name { font-size: 13px; font-weight: 500; }
@@ -184,18 +215,10 @@
 
   .panel-title { font-size: 15px; font-weight: 600; }
 
-  .threshold-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
+  .threshold-row { display: flex; align-items: center; gap: 10px; }
   .threshold-label { font-size: 12px; color: var(--text-muted); }
 
-  input[type=range] {
-    width: 120px;
-    accent-color: var(--accent);
-  }
+  input[type=range] { width: 120px; accent-color: var(--accent); }
 
   .threshold-val { font-size: 13px; font-weight: 600; min-width: 36px; }
 
@@ -211,22 +234,25 @@
     margin-bottom: 10px;
   }
 
-  .ip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; min-height: 28px; }
+  .section-desc { font-size: 12px; color: var(--text-faint); margin-bottom: 10px; }
 
-  .ip-tag {
+  .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; min-height: 28px; }
+
+  .tag {
     background: var(--bg);
     border: 1px solid var(--border-strong);
     border-radius: 20px;
     padding: 3px 10px 3px 12px;
     font-size: 12px;
-    font-family: 'SF Mono', 'Fira Code', monospace;
     color: var(--text);
     display: flex;
     align-items: center;
     gap: 6px;
   }
 
-  .ip-tag button {
+  .tag.mono { font-family: 'SF Mono', 'Fira Code', monospace; }
+
+  .tag button {
     background: none;
     border: none;
     cursor: pointer;
@@ -236,12 +262,11 @@
     padding: 0;
   }
 
-  .ip-tag button:hover { color: var(--danger-text); }
+  .tag button:hover { color: var(--danger-text); }
 
-  .ip-input-row { display: flex; gap: 8px; }
+  .input-row { display: flex; gap: 8px; }
 
-  input[type=text] {
-    flex: 1;
+  input[type=text], input[type=checkbox] {
     padding: 7px 10px;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius);
@@ -252,7 +277,24 @@
     outline: none;
   }
 
+  input[type=text] { flex: 1; }
   input[type=text]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(26,26,24,0.08); }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .toggle-row input[type=checkbox] {
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
 
   .btn {
     padding: 7px 14px;
@@ -268,13 +310,11 @@
 
   .btn:hover { background: var(--bg); }
 
-  .btn-primary {
-    background: var(--accent);
-    color: var(--accent-text);
-    border-color: var(--accent);
-  }
-
+  .btn-primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
   .btn-primary:hover { opacity: 0.85; }
+
+  .btn-danger { background: var(--danger-bg); color: var(--danger-text); border-color: var(--danger-text); }
+  .btn-danger:hover { opacity: 0.85; }
 
   .cat-grid {
     display: grid;
@@ -297,12 +337,7 @@
   }
 
   .cat-item:hover { border-color: var(--border-strong); background: var(--bg); }
-
-  .cat-item.selected {
-    border-color: var(--info-border);
-    background: var(--info-bg);
-    color: var(--info-text);
-  }
+  .cat-item.selected { border-color: var(--info-border); background: var(--info-bg); color: var(--info-text); }
 
   .cat-check {
     width: 14px;
@@ -315,10 +350,7 @@
     justify-content: center;
   }
 
-  .cat-item.selected .cat-check {
-    background: var(--info-text);
-    border-color: var(--info-text);
-  }
+  .cat-item.selected .cat-check { background: var(--info-text); border-color: var(--info-text); }
 
   .cat-check-inner {
     width: 8px;
@@ -337,6 +369,41 @@
     margin-top: 1.25rem;
     padding-top: 1rem;
     border-top: 1px solid var(--border);
+  }
+
+  .pattern-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+
+  .pattern-item {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .pattern-name { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+  .pattern-regex { font-size: 11px; font-family: 'SF Mono', 'Fira Code', monospace; color: var(--text-muted); word-break: break-all; }
+
+  .add-pattern-form {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .add-pattern-form.visible { display: flex; }
+
+  .dlp-enabled-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
   }
 
   .toast {
@@ -358,65 +425,161 @@
   .toast.show { opacity: 1; }
 
   @media (max-width: 640px) {
-    .main { grid-template-columns: 1fr; padding: 1rem; }
+    .main-groups { grid-template-columns: 1fr; }
+    .main { padding: 0 1rem 1rem; }
+    .nav-tabs { padding: 1rem 1rem 0; }
   }
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <div class="topbar-title">J-ICAP <span>/ group manager</span></div>
-  <div class="topbar-badge">v1.0</div>
+  <div class="topbar-title">CIRNO-ICAP <span>/ admin</span></div>
+  <div class="topbar-right">
+    <div class="topbar-badge">v0.7</div>
+  </div>
 </div>
 
-<div class="main">
-  <div>
-    <div class="card">
-      <div class="card-header">
-        <span class="card-header-label">Groups</span>
-        <button class="btn-icon" id="btn-add-group" title="Add group">+</button>
+<div class="nav-tabs">
+  <button class="nav-tab active" onclick="switchTab('groups')">Groups</button>
+  <button class="nav-tab" onclick="switchTab('dlp')">DLP</button>
+</div>
+
+<!-- GROUPS TAB -->
+<div class="main tab-content active" id="tab-groups">
+  <div class="main-groups">
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-header-label">Groups</span>
+          <button class="btn-icon" id="btn-add-group" title="Add group">+</button>
+        </div>
+        <div id="group-list"></div>
+        <div class="add-group-form" id="add-group-form">
+          <input type="text" id="new-group-name" placeholder="Group name" />
+          <button class="btn btn-primary" id="btn-confirm-add">Add</button>
+        </div>
       </div>
-      <div id="group-list"></div>
-      <div class="add-group-form" id="add-group-form">
-        <input type="text" id="new-group-name" placeholder="Group name" />
-        <button class="btn btn-primary" id="btn-confirm-add">Add</button>
+    </div>
+
+    <div class="card">
+      <div class="panel">
+        <div class="panel-empty" id="panel-empty">Select a group to configure</div>
+        <div id="panel-content" style="display:none;">
+          <div class="panel-top">
+            <span class="panel-title" id="panel-title"></span>
+            <div class="threshold-row">
+              <span class="threshold-label">Block threshold</span>
+              <input type="range" min="50" max="1000" step="50" id="threshold-slider" />
+              <span class="threshold-val" id="threshold-val">400</span>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-label">Safe Search</div>
+            <label class="toggle-row">
+              <input type="checkbox" id="safe-search-toggle">
+              <span>Enable Google Safe Search for this group</span>
+            </label>
+          </div>
+
+          <div class="section" id="ip-section">
+            <div class="section-label">IP addresses</div>
+            <div class="tag-list" id="ip-list"></div>
+            <div class="input-row">
+              <input type="text" id="ip-input" placeholder="192.168.1.x" style="font-family: 'SF Mono', 'Fira Code', monospace;" />
+              <button class="btn" id="btn-add-ip">Add IP</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-label">Categories</div>
+            <div class="cat-grid" id="cat-grid"></div>
+          </div>
+
+          <div class="save-bar">
+            <button class="btn" id="btn-copy">Copy JSON</button>
+            <button class="btn btn-primary" id="btn-save">Save to server</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
+</div>
 
-  <div class="card">
-    <div class="panel">
-      <div class="panel-empty" id="panel-empty">Select a group to configure</div>
-      <div id="panel-content" style="display:none;">
-        <div class="panel-top">
-          <span class="panel-title" id="panel-title"></span>
-          <div class="threshold-row">
-            <span class="threshold-label">Block threshold</span>
-            <input type="range" min="50" max="1000" step="50" id="threshold-slider" />
-            <span class="threshold-val" id="threshold-val">400</span>
-          </div>
+<!-- DLP TAB -->
+<div class="main tab-content" id="tab-dlp">
+  <div class="main-dlp">
+
+    <!-- DLP Enabled toggle -->
+    <div class="card">
+      <div class="dlp-enabled-row">
+        <div>
+          <div style="font-weight:500;font-size:13px;">Data Loss Prevention</div>
+          <div style="font-size:12px;color:var(--text-faint);margin-top:2px;">Scan uploads and POST requests for sensitive content</div>
         </div>
+        <label class="toggle-row">
+          <input type="checkbox" id="dlp-enabled">
+          <span style="font-size:13px;">Enabled</span>
+        </label>
+      </div>
+    </div>
 
-        <div class="section">
-          <div class="section-label">IP addresses</div>
-          <div class="ip-list" id="ip-list"></div>
-          <div class="ip-input-row">
-            <input type="text" id="ip-input" placeholder="192.168.1.x" style="font-family: 'SF Mono', 'Fira Code', monospace;" />
-            <button class="btn" id="btn-add-ip">Add IP</button>
-          </div>
-        </div>
-
-        <div class="section">
-          <div class="section-label">Categories</div>
-          <div class="cat-grid" id="cat-grid"></div>
-        </div>
-
-        <div class="save-bar">
-          <button class="btn" id="btn-copy">Copy JSON</button>
-          <button class="btn btn-primary" id="btn-save">Save to server</button>
+    <!-- Blocked Upload Domains -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-header-label">Blocked Upload Domains</span>
+      </div>
+      <div class="card-body">
+        <div class="section-desc">DLP scanning is applied to POST/PUT requests to these domains.</div>
+        <div class="tag-list" id="domain-list"></div>
+        <div class="input-row">
+          <input type="text" id="domain-input" placeholder="dropbox.com" style="font-family: 'SF Mono', 'Fira Code', monospace;" />
+          <button class="btn" id="btn-add-domain">Add Domain</button>
         </div>
       </div>
     </div>
+
+    <!-- Custom Keywords -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-header-label">Custom Keywords</span>
+      </div>
+      <div class="card-body">
+        <div class="section-desc">Block uploads containing these words or phrases.</div>
+        <div class="tag-list" id="keyword-list"></div>
+        <div class="input-row">
+          <input type="text" id="keyword-input" placeholder="confidential" />
+          <button class="btn" id="btn-add-keyword">Add Keyword</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Patterns -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-header-label">Regex Patterns</span>
+        <button class="btn-icon" id="btn-add-pattern-toggle" title="Add pattern">+</button>
+      </div>
+      <div class="card-body">
+        <div class="section-desc">Regex patterns to detect sensitive data like credit cards or IBANs.</div>
+        <div class="add-pattern-form" id="add-pattern-form">
+          <input type="text" id="pattern-name-input" placeholder="Pattern name (e.g. Credit Card)" />
+          <input type="text" id="pattern-regex-input" placeholder="Regex (e.g. \b4[0-9]{12}\b)" style="font-family: 'SF Mono', 'Fira Code', monospace;" />
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button class="btn" id="btn-cancel-pattern">Cancel</button>
+            <button class="btn btn-primary" id="btn-confirm-pattern">Add Pattern</button>
+          </div>
+        </div>
+        <div class="pattern-list" id="pattern-list"></div>
+      </div>
+    </div>
+
+    <!-- DLP Save -->
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-primary" id="btn-save-dlp">Save DLP config</button>
+    </div>
+
   </div>
 </div>
 
@@ -425,19 +588,28 @@
 <script>
 const ALL_CATEGORIES = ['adult','gambling','drugs','illegaldrugs','weapons','violence','chat','games','proxies','nudism','pornography','gore','drugadvocacy','intolerance','warezhacking','kidstimewasting','personals','badwords'];
 
-let state = { groups: {}, selected: null };
-
-async function fetchConfig() {
-  try {
-    const r = await fetch('/api/config');
-    const data = await r.json();
-    state.groups = data.groups || {};
-    renderGroups();
-  } catch(e) {
-    showToast('Could not load config');
+let state = {
+  groups: {},
+  selected: null,
+  dlp: {
+    enabled: false,
+    blocked_upload_domains: [],
+    patterns: {},
+    custom_keywords: []
   }
+};
+
+// --- Tab switching ---
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(t => {
+    if (t.textContent.toLowerCase().includes(tab)) t.classList.add('active');
+  });
 }
 
+// --- Toast ---
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -445,21 +617,40 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 
+// --- Fetch config ---
+async function fetchConfig() {
+  try {
+    const r = await fetch('/api/config');
+    const data = await r.json();
+    state.groups = data.web_filter?.groups || {};
+    state.dlp = data.dlp || { enabled: false, blocked_upload_domains: [], patterns: {}, custom_keywords: [] };
+    renderGroups();
+    renderDLP();
+  } catch(e) {
+    showToast('Could not load config');
+  }
+}
+
+// --- Groups ---
 function renderGroups() {
   const list = document.getElementById('group-list');
   list.innerHTML = '';
   Object.entries(state.groups).forEach(([name, cfg]) => {
+    const ips = cfg.ips || [];
+    const isDefault = name === 'default';
     const div = document.createElement('div');
     div.className = 'group-item' + (state.selected === name ? ' active' : '');
     div.innerHTML = `
       <div style="flex:1;min-width:0;cursor:pointer;">
-        <div class="group-name">${name}</div>
-        <div class="group-meta">${cfg.ips.length} IPs &middot; ${cfg.enabled_categories.length} categories</div>
+        <div class="group-name">${name}${isDefault ? ' <span style="font-size:10px;color:var(--text-faint);">(default)</span>' : ''}</div>
+        <div class="group-meta">${ips.length} IPs &middot; ${(cfg.enabled_categories||[]).length} categories</div>
       </div>
-      <button class="btn-del" title="Delete group">&times;</button>
+      ${isDefault ? '' : '<button class="btn-del" title="Delete group">&times;</button>'}
     `;
     div.querySelector('.group-name').parentElement.addEventListener('click', () => selectGroup(name));
-    div.querySelector('.btn-del').addEventListener('click', (e) => { e.stopPropagation(); deleteGroup(name); });
+    if (!isDefault) {
+      div.querySelector('.btn-del').addEventListener('click', (e) => { e.stopPropagation(); deleteGroup(name); });
+    }
     list.appendChild(div);
   });
 }
@@ -489,23 +680,27 @@ function renderPanel() {
   empty.style.display = 'none';
   content.style.display = 'block';
   const cfg = state.groups[state.selected];
+  const isDefault = state.selected === 'default';
   document.getElementById('panel-title').textContent = state.selected;
-  document.getElementById('threshold-slider').value = cfg.block_threshold;
-  document.getElementById('threshold-val').textContent = cfg.block_threshold;
+  document.getElementById('safe-search-toggle').checked = cfg.google_safe_search || false;
+  document.getElementById('threshold-slider').value = cfg.block_threshold || 400;
+  document.getElementById('threshold-val').textContent = cfg.block_threshold || 400;
+  document.getElementById('ip-section').style.display = isDefault ? 'none' : 'block';
   renderIPs();
   renderCats();
 }
 
 function renderIPs() {
   const cfg = state.groups[state.selected];
+  const ips = cfg.ips || [];
   const list = document.getElementById('ip-list');
   list.innerHTML = '';
-  cfg.ips.forEach(ip => {
+  ips.forEach(ip => {
     const tag = document.createElement('div');
-    tag.className = 'ip-tag';
+    tag.className = 'tag mono';
     tag.innerHTML = `${ip}<button title="Remove">&times;</button>`;
     tag.querySelector('button').addEventListener('click', () => {
-      cfg.ips = cfg.ips.filter(i => i !== ip);
+      cfg.ips = (cfg.ips || []).filter(i => i !== ip);
       renderIPs();
       renderGroups();
     });
@@ -518,11 +713,12 @@ function renderCats() {
   const grid = document.getElementById('cat-grid');
   grid.innerHTML = '';
   ALL_CATEGORIES.forEach(cat => {
-    const selected = cfg.enabled_categories.includes(cat);
+    const selected = (cfg.enabled_categories || []).includes(cat);
     const item = document.createElement('div');
     item.className = 'cat-item' + (selected ? ' selected' : '');
     item.innerHTML = `<div class="cat-check"><div class="cat-check-inner"></div></div><span>${cat}</span>`;
     item.addEventListener('click', () => {
+      if (!cfg.enabled_categories) cfg.enabled_categories = [];
       if (cfg.enabled_categories.includes(cat)) {
         cfg.enabled_categories = cfg.enabled_categories.filter(c => c !== cat);
       } else {
@@ -540,11 +736,16 @@ document.getElementById('threshold-slider').addEventListener('input', (e) => {
   if (state.selected) state.groups[state.selected].block_threshold = parseInt(e.target.value);
 });
 
+document.getElementById('safe-search-toggle').addEventListener('change', (e) => {
+  if (state.selected) state.groups[state.selected].google_safe_search = e.target.checked;
+});
+
 document.getElementById('btn-add-ip').addEventListener('click', () => {
   const input = document.getElementById('ip-input');
   const ip = input.value.trim();
   if (!ip) return;
   const cfg = state.groups[state.selected];
+  if (!cfg.ips) cfg.ips = [];
   if (cfg.ips.includes(ip)) { showToast('IP already in group'); return; }
   cfg.ips.push(ip);
   input.value = '';
@@ -567,7 +768,7 @@ document.getElementById('btn-confirm-add').addEventListener('click', () => {
   const name = input.value.trim();
   if (!name) return;
   if (state.groups[name]) { showToast('Group already exists'); return; }
-  state.groups[name] = { ips: [], block_threshold: 400, enabled_categories: [] };
+  state.groups[name] = { ips: [], block_threshold: 400, enabled_categories: [], google_safe_search: false };
   input.value = '';
   document.getElementById('add-group-form').classList.remove('visible');
   renderGroups();
@@ -579,12 +780,12 @@ document.getElementById('new-group-name').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('btn-confirm-add').click();
 });
 
-function buildConfig() {
-  return { default: { block_threshold: 400, enabled_categories: [] }, groups: state.groups };
+function buildGroupConfig() {
+  return { web_filter: { groups: state.groups } };
 }
 
 document.getElementById('btn-copy').addEventListener('click', () => {
-  navigator.clipboard.writeText(JSON.stringify(buildConfig(), null, 4))
+  navigator.clipboard.writeText(JSON.stringify(buildGroupConfig(), null, 4))
     .then(() => showToast('Copied to clipboard'))
     .catch(() => showToast('Copy failed'));
 });
@@ -594,10 +795,142 @@ document.getElementById('btn-save').addEventListener('click', async () => {
     const r = await fetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildConfig())
+      body: JSON.stringify(buildGroupConfig())
     });
     const data = await r.json();
     if (data.status === 'ok') showToast('Saved and reloaded');
+    else showToast('Save failed');
+  } catch(e) {
+    showToast('Could not reach server');
+  }
+});
+
+// --- DLP ---
+function renderDLP() {
+  document.getElementById('dlp-enabled').checked = state.dlp.enabled || false;
+  renderDomains();
+  renderKeywords();
+  renderPatterns();
+}
+
+function renderDomains() {
+  const list = document.getElementById('domain-list');
+  list.innerHTML = '';
+  (state.dlp.blocked_upload_domains || []).forEach(domain => {
+    const tag = document.createElement('div');
+    tag.className = 'tag mono';
+    tag.innerHTML = `${domain}<button title="Remove">&times;</button>`;
+    tag.querySelector('button').addEventListener('click', () => {
+      state.dlp.blocked_upload_domains = state.dlp.blocked_upload_domains.filter(d => d !== domain);
+      renderDomains();
+    });
+    list.appendChild(tag);
+  });
+}
+
+function renderKeywords() {
+  const list = document.getElementById('keyword-list');
+  list.innerHTML = '';
+  (state.dlp.custom_keywords || []).forEach(kw => {
+    const tag = document.createElement('div');
+    tag.className = 'tag';
+    tag.innerHTML = `${kw}<button title="Remove">&times;</button>`;
+    tag.querySelector('button').addEventListener('click', () => {
+      state.dlp.custom_keywords = state.dlp.custom_keywords.filter(k => k !== kw);
+      renderKeywords();
+    });
+    list.appendChild(tag);
+  });
+}
+
+function renderPatterns() {
+  const list = document.getElementById('pattern-list');
+  list.innerHTML = '';
+  Object.entries(state.dlp.patterns || {}).forEach(([name, regexes]) => {
+    const item = document.createElement('div');
+    item.className = 'pattern-item';
+    item.innerHTML = `
+      <div style="flex:1;min-width:0;">
+        <div class="pattern-name">${name}</div>
+        ${(regexes || []).map(r => `<div class="pattern-regex">${r}</div>`).join('')}
+      </div>
+      <button class="btn-del" title="Delete">&times;</button>
+    `;
+    item.querySelector('.btn-del').addEventListener('click', () => {
+      delete state.dlp.patterns[name];
+      renderPatterns();
+    });
+    list.appendChild(item);
+  });
+}
+
+document.getElementById('btn-add-domain').addEventListener('click', () => {
+  const input = document.getElementById('domain-input');
+  const domain = input.value.trim().toLowerCase();
+  if (!domain) return;
+  if (!state.dlp.blocked_upload_domains) state.dlp.blocked_upload_domains = [];
+  if (state.dlp.blocked_upload_domains.includes(domain)) { showToast('Domain already added'); return; }
+  state.dlp.blocked_upload_domains.push(domain);
+  input.value = '';
+  renderDomains();
+});
+
+document.getElementById('domain-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btn-add-domain').click();
+});
+
+document.getElementById('btn-add-keyword').addEventListener('click', () => {
+  const input = document.getElementById('keyword-input');
+  const kw = input.value.trim().toLowerCase();
+  if (!kw) return;
+  if (!state.dlp.custom_keywords) state.dlp.custom_keywords = [];
+  if (state.dlp.custom_keywords.includes(kw)) { showToast('Keyword already added'); return; }
+  state.dlp.custom_keywords.push(kw);
+  input.value = '';
+  renderKeywords();
+});
+
+document.getElementById('keyword-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btn-add-keyword').click();
+});
+
+document.getElementById('btn-add-pattern-toggle').addEventListener('click', () => {
+  document.getElementById('add-pattern-form').classList.toggle('visible');
+  document.getElementById('pattern-name-input').focus();
+});
+
+document.getElementById('btn-cancel-pattern').addEventListener('click', () => {
+  document.getElementById('add-pattern-form').classList.remove('visible');
+  document.getElementById('pattern-name-input').value = '';
+  document.getElementById('pattern-regex-input').value = '';
+});
+
+document.getElementById('btn-confirm-pattern').addEventListener('click', () => {
+  const name = document.getElementById('pattern-name-input').value.trim();
+  const regex = document.getElementById('pattern-regex-input').value.trim();
+  if (!name || !regex) { showToast('Name and regex required'); return; }
+  if (!state.dlp.patterns) state.dlp.patterns = {};
+  if (state.dlp.patterns[name]) {
+    state.dlp.patterns[name].push(regex);
+  } else {
+    state.dlp.patterns[name] = [regex];
+  }
+  document.getElementById('pattern-name-input').value = '';
+  document.getElementById('pattern-regex-input').value = '';
+  document.getElementById('add-pattern-form').classList.remove('visible');
+  renderPatterns();
+});
+
+document.getElementById('btn-save-dlp').addEventListener('click', async () => {
+  state.dlp.enabled = document.getElementById('dlp-enabled').checked;
+  try {
+    const r = await fetch('/api/config/dlp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state.dlp)
+    });
+    const data = await r.json();
+    if (data.status === 'ok') showToast('DLP config saved and reloaded');
     else showToast('Save failed');
   } catch(e) {
     showToast('Could not reach server');
