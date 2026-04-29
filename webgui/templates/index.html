@@ -639,20 +639,27 @@ function renderGroups() {
     const ips = cfg.ips || [];
     const isDefault = name === 'default';
     const div = document.createElement('div');
+    
     div.className = 'group-item' + (state.selected === name ? ' active' : '');
     div.innerHTML = `
-      <div style="flex:1;min-width:0;cursor:pointer;">
-        <div class="group-name">${name}${isDefault ? ' <span style="font-size:10px;color:var(--text-faint);">(default)</span>' : ''}</div>
+      <div style="flex:1;min-width:0; pointer-events: none;"> <div class="group-name">${name}${isDefault ? ' <span style="font-size:10px;color:var(--text-faint);">(default)</span>' : ''}</div>
         <div class="group-meta">${ips.length} IPs &middot; ${(cfg.enabled_categories||[]).length} categories</div>
       </div>
       ${isDefault ? '' : '<button class="btn-del" title="Delete group">&times;</button>'}
     `;
-    div.querySelector('.group-name').parentElement.addEventListener('click', () => selectGroup(name));
+
+    // FIX: Attach the listener to the WHOLE div (including the padding)
+    div.addEventListener('click', () => selectGroup(name));
+
     if (!isDefault) {
-      div.querySelector('.btn-del').addEventListener('click', (e) => { e.stopPropagation(); deleteGroup(name); });
+      div.querySelector('.btn-del').addEventListener('click', (e) => { 
+        e.stopPropagation(); // This prevents selectGroup from firing when deleting
+        deleteGroup(name); 
+      });
     }
+    
     list.appendChild(div);
-  });
+});
 }
 
 function selectGroup(name) {
