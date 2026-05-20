@@ -12,12 +12,12 @@ PHRASELIST_DIR = f"{CONFIG_DIR}/phraselist"
 NETBIRD_BASE_URL = "https://netbird.newwave.local/api"
 NETBIRD_TOKEN = os.environ.get("NETBIRD_TOKEN", "")
 
-# Default skeleton for a newly created group
+# Updated default skeleton for a newly created group using nested user arrays
 DEFAULT_GROUP = {
     "block_threshold": 400,
     "enabled_categories": [],
     "google_safe_search": False,
-    "ips": []
+    "users": []
 }
 
 
@@ -107,9 +107,10 @@ def delete_group(name):
 @app.route('/api/categories', methods=['GET'])
 def get_categories():
     categories = []
-    for cat in os.listdir(PHRASELIST_DIR):
-        if os.path.isdir(os.path.join(PHRASELIST_DIR, cat)):
-            categories.append(cat)
+    if os.path.exists(PHRASELIST_DIR):
+        for cat in os.listdir(PHRASELIST_DIR):
+            if os.path.isdir(os.path.join(PHRASELIST_DIR, cat)):
+                categories.append(cat)
     return jsonify(categories)
 
 
@@ -117,11 +118,12 @@ def get_categories():
 def get_keywords(category):
     keywords = []
     cat_path = os.path.join(PHRASELIST_DIR, category)
-    for filename in os.listdir(cat_path):
-        filepath = os.path.join(cat_path, filename)
-        if os.path.isfile(filepath):
-            with open(filepath) as f:
-                keywords.extend([l.strip() for l in f if l.strip() and not l.startswith('#')])
+    if os.path.exists(cat_path):
+        for filename in os.listdir(cat_path):
+            filepath = os.path.join(cat_path, filename)
+            if os.path.isfile(filepath):
+                with open(filepath) as f:
+                    keywords.extend([l.strip() for l in f if l.strip() and not l.startswith('#')])
     return jsonify(keywords)
 
 
@@ -135,31 +137,24 @@ def save_keywords(category):
     reload_icap()
     return jsonify({"status": "ok"})
 
-@app.route('/api/groups', methods=['GET'])
-def get_groups_response():
+
+# Updated to aggregate IPs from the nested users schema
+@app.route('/api/groups/ips', methods=['GET'])
+def get_groups_ips_response():
     config = read_config()
     groups = config.get("web_filter", {}).get("groups", {})
-    # Return just name -> ips mapping
-    return jsonify({
-        name: data.get("ips", [])
-        for name, data in groups.items()
-    })
+    response_data = {}
+    for name, data in groups.items():
+        all_ips = []
+        for user_obj in data.get("users", []):
+            all_ips.extend(user_obj.get("ips", []))
+        response_data[name] = all_ips
+    return jsonify(response_data)
+
+
 # --- NetBird Sync ---
 @app.route('/api/sync-netbird', methods=['POST'])
 def sync_netbird():
-    """
-    Sync NetBird peers into CIRNO web_filter groups using Entra ID group
-    membership.
-
-    Flow:
-      1. Fetch /api/peers, /api/users, /api/groups from NetBird.
-      2. Build a map of group_id -> group_name (skip "All").
-      3. For each peer, find the matching user via peer.user_id == user.id,
-         then resolve the user's auto_groups IDs to names.
-      4. Map each peer's connection_ip into those group names.
-      5. Create any missing groups in CIRNO config with DEFAULT_GROUP settings,
-         update IPs for existing ones, and reload ICAP.
-    """
     if not NETBIRD_TOKEN:
         return jsonify({"status": "error", "message": "NETBIRD_TOKEN environment variable is not set"}), 500
 
@@ -170,47 +165,52 @@ def sync_netbird():
     except requests.RequestException as e:
         return jsonify({"status": "error", "message": f"NetBird API error: {e}"}), 502
 
-    # group_id -> group_name, excluding "All"
     group_id_to_name = {
         g["id"]: g["name"]
         for g in nb_groups
         if g.get("name", "").lower() != "all"
     }
 
-    # user_id -> list of resolved group names (via auto_groups)
-    user_id_to_groups = {
-        u["id"]: [
-            group_id_to_name[gid]
-            for gid in u.get("auto_groups", [])
-            if gid in group_id_to_name
-        ]
+    user_id_to_info = {
+        u["id"]: {
+            "username": u.get("name") or u.get("id"),
+            "groups": [group_id_to_name[gid] for gid in u.get("auto_groups", []) if gid in group_id_to_name]
+        }
         for u in users
     }
 
-    # Build group_name -> set of connection_ips
-    group_ips: dict[str, set] = {}
+    # Structure: { group_name: { username: set(ips) } }
+    group_user_ips = {}
     for peer in peers:
         connection_ip = peer.get("ip", "").strip()
         if not connection_ip:
             continue
         user_id = peer.get("user_id", "")
-        group_names = user_id_to_groups.get(user_id, [])
-        for name in group_names:
-            group_ips.setdefault(name, set()).add(connection_ip)
+        if user_id in user_id_to_info:
+            u_info = user_id_to_info[user_id]
+            username = u_info["username"]
+            for g_name in u_info["groups"]:
+                group_user_ips.setdefault(g_name, {}).setdefault(username, set()).add(connection_ip)
 
     config = read_config()
     groups = config.setdefault("web_filter", {}).setdefault("groups", {})
     changes = {"created": [], "updated": [], "unchanged": []}
 
-    for group_name, ips in group_ips.items():
-        sorted_ips = sorted(ips)
+    for group_name, users_dict in group_user_ips.items():
+        sorted_users_list = [
+            {"username": uname, "ips": sorted(list(ips_set))}
+            for uname, ips_set in sorted_users_list.items()
+        ]
+        # Sort user lists by username stably to minimize cosmetic file differences
+        sorted_users_list = sorted(sorted_users_list, key=lambda x: x["username"])
+
         if group_name not in groups:
-            groups[group_name] = {**DEFAULT_GROUP, "ips": sorted_ips}
+            groups[group_name] = {**DEFAULT_GROUP, "users": sorted_users_list}
             changes["created"].append(group_name)
         else:
-            old_ips = sorted(groups[group_name].get("ips", []))
-            if old_ips != sorted_ips:
-                groups[group_name]["ips"] = sorted_ips
+            old_users = groups[group_name].get("users", [])
+            if json.dumps(old_users, sort_keys=True) != json.dumps(sorted_users_list, sort_keys=True):
+                groups[group_name]["users"] = sorted_users_list
                 changes["updated"].append(group_name)
             else:
                 changes["unchanged"].append(group_name)

@@ -195,8 +195,12 @@ def load_config():
         raw_groups = web_filter.get("groups", {})
         GROUPS = {}
         for name, cfg in raw_groups.items():
+            users = cfg.get("users", [])
+            # Flatten all IPs from all users for quick lookup
+            all_ips = [ip for user in users for ip in user.get("ips", [])]
             GROUPS[name] = {
-                "ips": cfg.get("ips", []),
+                "users": users,
+                "ips": all_ips,  # flattened for quick IP lookup
                 "block_threshold": cfg.get("block_threshold", 100),
                 "enabled_categories": [c.lower() for c in cfg.get("enabled_categories", [])],
                 "google_safe_search": cfg.get("google_safe_search", False)
@@ -370,22 +374,23 @@ def decode_body_recursive(obj):
     return text
 
 def get_group_config(client_ip):
-    # Check specific groups first (skip default)
     for group_name, group_cfg in GROUPS.items():
         if group_name == 'default':
             continue
         if client_ip in group_cfg.get("ips", []):
-            print(f"[DEBUG] Client {client_ip} matched group: {group_name}")
-            return group_cfg
+            # Find which user this IP belongs to
+            username = "unknown"
+            for user in group_cfg.get("users", []):
+                if client_ip in user.get("ips", []):
+                    username = user["username"]
+                    break
+            print(f"[DEBUG] Client {client_ip} matched group: {group_name} | user: {username}")
+            return group_cfg, group_name, username
 
-    # Fall back to default group if it exists
     if 'default' in GROUPS:
-        print(f"[DEBUG] Client {client_ip} using default group")
-        return GROUPS['default']
+        return GROUPS['default'], 'default', 'unknown'
 
-    # No default group - pass through without filtering
-    print(f"[DEBUG] Client {client_ip} not in any group - passing through")
-    return {"ips": [], "block_threshold": 100, "enabled_categories": None, "google_safe_search": False}
+    return {"ips": [], "block_threshold": 100, "enabled_categories": None, "google_safe_search": False}, None, 'unknown'
 
 def is_whole_word_match(text, keyword, end_index):
     start_index = end_index - len(keyword) + 1
@@ -503,9 +508,12 @@ class KeywordFilter(BaseICAPRequestHandler):
 
     def keyword_filter_REQMOD(self):
         client_ip = get_client_ip(self)
-        group_cfg = get_group_config(client_ip)
+        group_cfg, group_name, username = get_group_config(client_ip)
         block_threshold = group_cfg["block_threshold"]
         enabled_categories = group_cfg["enabled_categories"]
+        print(f"[DEBUG] Client: {client_ip} | User: {username} | Group: {group_name}")
+        
+        
 
         body = b""
         if self.has_body:
@@ -617,8 +625,9 @@ class KeywordFilter(BaseICAPRequestHandler):
             self.write_chunk(b"")
 
     def keyword_filter_RESPMOD(self):
-        client_ip = get_client_ip(self)
-        group_cfg = get_group_config(client_ip)
+        client_ip = get_client_ip(self)        
+        # FIX 1: Fixed tuple unpacking error
+        group_cfg, group_name, username = get_group_config(client_ip)
         block_threshold = group_cfg["block_threshold"]
         enabled_categories = group_cfg["enabled_categories"]
 

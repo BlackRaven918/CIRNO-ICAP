@@ -445,7 +445,6 @@
   <button class="nav-tab" onclick="switchTab('dlp')">DLP</button>
 </div>
 
-<!-- GROUPS TAB -->
 <div class="main tab-content active" id="tab-groups">
   <div class="main-groups">
     <div>
@@ -483,12 +482,13 @@
             </label>
           </div>
 
-          <div class="section" id="ip-section">
-            <div class="section-label">IP addresses</div>
-            <div class="tag-list" id="ip-list"></div>
-            <div class="input-row">
-              <input type="text" id="ip-input" placeholder="192.168.1.x" style="font-family: 'SF Mono', 'Fira Code', monospace;" />
-              <button class="btn" id="btn-add-ip">Add IP</button>
+          <div class="section" id="user-section">
+            <div class="section-label">Users & IP Addresses</div>
+            <div class="tag-list" id="user-ip-list"></div>
+            <div class="input-row" style="flex-wrap: wrap;">
+              <input type="text" id="user-username-input" placeholder="Username (e.g. alice)" style="min-width: 120px;" />
+              <input type="text" id="user-ips-input" placeholder="IPs separated by commas (e.g. 10.0.0.1, 192.168.1.1)" style="font-family: 'SF Mono', 'Fira Code', monospace; min-width: 240px;" />
+              <button class="btn" id="btn-add-user">Add User Entry</button>
             </div>
           </div>
 
@@ -507,11 +507,9 @@
   </div>
 </div>
 
-<!-- DLP TAB -->
 <div class="main tab-content" id="tab-dlp">
   <div class="main-dlp">
 
-    <!-- DLP Enabled toggle -->
     <div class="card">
       <div class="dlp-enabled-row">
         <div>
@@ -525,7 +523,6 @@
       </div>
     </div>
 
-    <!-- Blocked Upload Domains -->
     <div class="card">
       <div class="card-header">
         <span class="card-header-label">Blocked Upload Domains</span>
@@ -540,7 +537,6 @@
       </div>
     </div>
 
-    <!-- Custom Keywords -->
     <div class="card">
       <div class="card-header">
         <span class="card-header-label">Custom Keywords</span>
@@ -555,7 +551,6 @@
       </div>
     </div>
 
-    <!-- Patterns -->
     <div class="card">
       <div class="card-header">
         <span class="card-header-label">Regex Patterns</span>
@@ -575,7 +570,6 @@
       </div>
     </div>
 
-    <!-- DLP Save -->
     <div style="display:flex;justify-content:flex-end;gap:8px;">
       <button class="btn btn-primary" id="btn-save-dlp">Save DLP config</button>
     </div>
@@ -586,7 +580,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const ALL_CATEGORIES = ['adult','gambling','drugs','illegaldrugs','weapons','violence','chat','games','proxies','nudism','pornography','gore','drugadvocacy','intolerance','warezhacking','kidstimewasting','personals','badwords'];
+let ALL_CATEGORIES = ['adult','gambling','drugs','illegaldrugs','weapons','violence','chat','games','proxies','nudism','pornography','gore','drugadvocacy','intolerance','warezhacking','kidstimewasting','personals','badwords'];
 
 let state = {
   groups: {},
@@ -620,46 +614,61 @@ function showToast(msg) {
 // --- Fetch config ---
 async function fetchConfig() {
   try {
+    const catResponse = await fetch('/api/categories');
+    if (catResponse.ok) {
+      const serverCats = await catResponse.json();
+      if (Array.isArray(serverCats) && serverCats.length > 0) {
+        ALL_CATEGORIES = serverCats;
+      }
+    }
+
     const r = await fetch('/api/config');
     const data = await r.json();
     state.groups = data.web_filter?.groups || {};
     state.dlp = data.dlp || { enabled: false, blocked_upload_domains: [], patterns: {}, custom_keywords: [] };
     renderGroups();
-    renderDLP();
+    renderPanel();
   } catch(e) {
     showToast('Could not load config');
   }
 }
 
-// --- Groups ---
+// --- Groups Rendering ---
 function renderGroups() {
   const list = document.getElementById('group-list');
   list.innerHTML = '';
   Object.entries(state.groups).forEach(([name, cfg]) => {
-    const ips = cfg.ips || [];
     const isDefault = name === 'default';
-    const div = document.createElement('div');
     
+    // Compute totals using the nested structured context
+    let totalUsers = 0;
+    let totalIps = 0;
+    if (cfg.users && Array.isArray(cfg.users)) {
+       totalUsers = cfg.users.length;
+       cfg.users.forEach(u => { totalIps += (u.ips || []).length; });
+    }
+
+    const div = document.createElement('div');
     div.className = 'group-item' + (state.selected === name ? ' active' : '');
     div.innerHTML = `
-      <div style="flex:1;min-width:0; pointer-events: none;"> <div class="group-name">${name}${isDefault ? ' <span style="font-size:10px;color:var(--text-faint);">(default)</span>' : ''}</div>
-        <div class="group-meta">${ips.length} IPs &middot; ${(cfg.enabled_categories||[]).length} categories</div>
+      <div style="flex:1;min-width:0; pointer-events: none;"> 
+        <div class="group-name">${name}${isDefault ? ' <span style="font-size:10px;color:var(--text-faint);">(default)</span>' : ''}</div>
+        <div class="group-meta">${totalUsers} Users (${totalIps} IPs) &middot; ${(cfg.enabled_categories||[]).length} categories</div>
       </div>
       ${isDefault ? '' : '<button class="btn-del" title="Delete group">&times;</button>'}
     `;
 
-    // FIX: Attach the listener to the WHOLE div (including the padding)
     div.addEventListener('click', () => selectGroup(name));
 
     if (!isDefault) {
       div.querySelector('.btn-del').addEventListener('click', (e) => { 
-        e.stopPropagation(); // This prevents selectGroup from firing when deleting
+        e.stopPropagation(); 
         deleteGroup(name); 
       });
     }
     
     list.appendChild(div);
-});
+  });
 }
 
 function selectGroup(name) {
@@ -692,23 +701,33 @@ function renderPanel() {
   document.getElementById('safe-search-toggle').checked = cfg.google_safe_search || false;
   document.getElementById('threshold-slider').value = cfg.block_threshold || 400;
   document.getElementById('threshold-val').textContent = cfg.block_threshold || 400;
-  document.getElementById('ip-section').style.display = isDefault ? 'none' : 'block';
-  renderIPs();
+  
+  // The 'default' group in your config doesn't have a user list node
+  document.getElementById('user-section').style.display = isDefault ? 'none' : 'block';
+  
+  renderUsersAndIps();
   renderCats();
 }
 
-function renderIPs() {
+// Rewritten to dynamically render user strings combined with their matching registered IPs inside bubbles
+function renderUsersAndIps() {
   const cfg = state.groups[state.selected];
-  const ips = cfg.ips || [];
-  const list = document.getElementById('ip-list');
+  const users = cfg.users || [];
+  const list = document.getElementById('user-ip-list');
   list.innerHTML = '';
-  ips.forEach(ip => {
+  
+  users.forEach((userObj, index) => {
+    const username = userObj.username || 'unknown';
+    const ips = userObj.ips || [];
     const tag = document.createElement('div');
-    tag.className = 'tag mono';
-    tag.innerHTML = `${ip}<button title="Remove">&times;</button>`;
+    tag.className = 'tag';
+    
+    // Beautiful representation showing both: username (ip1, ip2)
+    tag.innerHTML = `<strong>${username}</strong> <span style="color:var(--text-muted); font-size:11px; font-family:monospace;">(${ips.join(', ')})</span><button title="Remove User">&times;</button>`;
+    
     tag.querySelector('button').addEventListener('click', () => {
-      cfg.ips = (cfg.ips || []).filter(i => i !== ip);
-      renderIPs();
+      cfg.users.splice(index, 1);
+      renderUsersAndIps();
       renderGroups();
     });
     list.appendChild(tag);
@@ -738,6 +757,7 @@ function renderCats() {
   });
 }
 
+// --- Group View Listeners ---
 document.getElementById('threshold-slider').addEventListener('input', (e) => {
   document.getElementById('threshold-val').textContent = e.target.value;
   if (state.selected) state.groups[state.selected].block_threshold = parseInt(e.target.value);
@@ -747,21 +767,37 @@ document.getElementById('safe-search-toggle').addEventListener('change', (e) => 
   if (state.selected) state.groups[state.selected].google_safe_search = e.target.checked;
 });
 
-document.getElementById('btn-add-ip').addEventListener('click', () => {
-  const input = document.getElementById('ip-input');
-  const ip = input.value.trim();
-  if (!ip) return;
+// Structural action modified to pull username strings alongside mapped array entries split by commas
+document.getElementById('btn-add-user').addEventListener('click', () => {
+  const usernameInput = document.getElementById('user-username-input');
+  const ipsInput = document.getElementById('user-ips-input');
+  
+  const username = usernameInput.value.trim();
+  const rawIps = ipsInput.value.trim();
+  
+  if (!username) { showToast('Username field is required'); return; }
+  
   const cfg = state.groups[state.selected];
-  if (!cfg.ips) cfg.ips = [];
-  if (cfg.ips.includes(ip)) { showToast('IP already in group'); return; }
-  cfg.ips.push(ip);
-  input.value = '';
-  renderIPs();
+  if (!cfg.users) cfg.users = [];
+  
+  // Verify user records don't conflict
+  if (cfg.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+     showToast('User node target already exists');
+     return;
+  }
+  
+  // Convert comma-delimited strings to string array chunks
+  const ipsArray = rawIps ? rawIps.split(',').map(ip => ip.trim()).filter(ip => ip.length > 0) : [];
+  
+  cfg.users.push({
+     username: username,
+     ips: ipsArray
+  });
+  
+  usernameInput.value = '';
+  ipsInput.value = '';
+  renderUsersAndIps();
   renderGroups();
-});
-
-document.getElementById('ip-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('btn-add-ip').click();
 });
 
 document.getElementById('btn-add-group').addEventListener('click', () => {
@@ -775,7 +811,7 @@ document.getElementById('btn-confirm-add').addEventListener('click', () => {
   const name = input.value.trim();
   if (!name) return;
   if (state.groups[name]) { showToast('Group already exists'); return; }
-  state.groups[name] = { ips: [], block_threshold: 400, enabled_categories: [], google_safe_search: false };
+  state.groups[name] = { users: [], block_threshold: 400, enabled_categories: [], google_safe_search: false };
   input.value = '';
   document.getElementById('add-group-form').classList.remove('visible');
   renderGroups();
@@ -812,7 +848,7 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   }
 });
 
-// --- DLP ---
+// --- DLP Tab Operations ---
 function renderDLP() {
   document.getElementById('dlp-enabled').checked = state.dlp.enabled || false;
   renderDomains();
@@ -853,15 +889,15 @@ function renderKeywords() {
 function renderPatterns() {
   const list = document.getElementById('pattern-list');
   list.innerHTML = '';
-  Object.entries(state.dlp.patterns || {}).forEach(([name, regexes]) => {
+  Object.entries(state.dlp.patterns || {}).forEach(([name, regex]) => {
     const item = document.createElement('div');
     item.className = 'pattern-item';
     item.innerHTML = `
-      <div style="flex:1;min-width:0;">
+      <div>
         <div class="pattern-name">${name}</div>
-        ${(regexes || []).map(r => `<div class="pattern-regex">${r}</div>`).join('')}
+        <div class="pattern-regex">${regex}</div>
       </div>
-      <button class="btn-del" title="Delete">&times;</button>
+      <button class="btn-del" title="Remove pattern">&times;</button>
     `;
     item.querySelector('.btn-del').addEventListener('click', () => {
       delete state.dlp.patterns[name];
@@ -871,12 +907,17 @@ function renderPatterns() {
   });
 }
 
+// --- DLP View Listeners ---
+document.getElementById('dlp-enabled').addEventListener('change', (e) => {
+  state.dlp.enabled = e.target.checked;
+});
+
 document.getElementById('btn-add-domain').addEventListener('click', () => {
   const input = document.getElementById('domain-input');
-  const domain = input.value.trim().toLowerCase();
+  const domain = input.value.trim();
   if (!domain) return;
   if (!state.dlp.blocked_upload_domains) state.dlp.blocked_upload_domains = [];
-  if (state.dlp.blocked_upload_domains.includes(domain)) { showToast('Domain already added'); return; }
+  if (state.dlp.blocked_upload_domains.includes(domain)) { showToast('Domain already listed'); return; }
   state.dlp.blocked_upload_domains.push(domain);
   input.value = '';
   renderDomains();
@@ -888,10 +929,10 @@ document.getElementById('domain-input').addEventListener('keydown', (e) => {
 
 document.getElementById('btn-add-keyword').addEventListener('click', () => {
   const input = document.getElementById('keyword-input');
-  const kw = input.value.trim().toLowerCase();
+  const kw = input.value.trim();
   if (!kw) return;
   if (!state.dlp.custom_keywords) state.dlp.custom_keywords = [];
-  if (state.dlp.custom_keywords.includes(kw)) { showToast('Keyword already added'); return; }
+  if (state.dlp.custom_keywords.includes(kw)) { showToast('Keyword already listed'); return; }
   state.dlp.custom_keywords.push(kw);
   input.value = '';
   renderKeywords();
@@ -902,8 +943,9 @@ document.getElementById('keyword-input').addEventListener('keydown', (e) => {
 });
 
 document.getElementById('btn-add-pattern-toggle').addEventListener('click', () => {
-  document.getElementById('add-pattern-form').classList.toggle('visible');
-  document.getElementById('pattern-name-input').focus();
+  const form = document.getElementById('add-pattern-form');
+  form.classList.toggle('visible');
+  if (form.classList.contains('visible')) document.getElementById('pattern-name-input').focus();
 });
 
 document.getElementById('btn-cancel-pattern').addEventListener('click', () => {
@@ -913,23 +955,21 @@ document.getElementById('btn-cancel-pattern').addEventListener('click', () => {
 });
 
 document.getElementById('btn-confirm-pattern').addEventListener('click', () => {
-  const name = document.getElementById('pattern-name-input').value.trim();
-  const regex = document.getElementById('pattern-regex-input').value.trim();
-  if (!name || !regex) { showToast('Name and regex required'); return; }
+  const nameInput = document.getElementById('pattern-name-input');
+  const regexInput = document.getElementById('pattern-regex-input');
+  const name = nameInput.value.trim();
+  const regex = regexInput.value.trim();
+  if (!name || !regex) { showToast('Please enter both a name and a regex pattern'); return; }
   if (!state.dlp.patterns) state.dlp.patterns = {};
-  if (state.dlp.patterns[name]) {
-    state.dlp.patterns[name].push(regex);
-  } else {
-    state.dlp.patterns[name] = [regex];
-  }
-  document.getElementById('pattern-name-input').value = '';
-  document.getElementById('pattern-regex-input').value = '';
+  state.dlp.patterns[name] = regex;
+  nameInput.value = '';
+  regexInput.value = '';
   document.getElementById('add-pattern-form').classList.remove('visible');
   renderPatterns();
+  showToast(`Added pattern "${name}"`);
 });
 
 document.getElementById('btn-save-dlp').addEventListener('click', async () => {
-  state.dlp.enabled = document.getElementById('dlp-enabled').checked;
   try {
     const r = await fetch('/api/config/dlp', {
       method: 'POST',
@@ -937,13 +977,14 @@ document.getElementById('btn-save-dlp').addEventListener('click', async () => {
       body: JSON.stringify(state.dlp)
     });
     const data = await r.json();
-    if (data.status === 'ok') showToast('DLP config saved and reloaded');
-    else showToast('Save failed');
+    if (data.status === 'ok') showToast('DLP configuration saved and reloaded');
+    else showToast('DLP save failed');
   } catch(e) {
     showToast('Could not reach server');
   }
 });
 
+// Initial boot initialization
 fetchConfig();
 </script>
 </body>
