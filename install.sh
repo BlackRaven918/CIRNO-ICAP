@@ -39,8 +39,8 @@ chmod -R 755 $INSTALL_DIR
 # 4. Setup Virtual Environment
 echo "Creating Python virtual environment..."
 sudo -u $SERVICE_USER $PYTHON_BIN -m venv $INSTALL_DIR/venv
-sudo -u $SERVICE_USER $INSTALL_DIR/venv/bin/pip install --upgrade pip
-sudo -u $SERVICE_USER $INSTALL_DIR/venv/bin/pip install -r $INSTALL_DIR/requirements.txt
+sudo -u $SERVICE_USER $INSTALL_DIR/venv/bin/pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --upgrade pip
+sudo -u $SERVICE_USER $INSTALL_DIR/venv/bin/pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r $INSTALL_DIR/requirements.txt
 
 # 5. Apply the pyicap Patch
 echo "Applying pyicap.py collections fix..."

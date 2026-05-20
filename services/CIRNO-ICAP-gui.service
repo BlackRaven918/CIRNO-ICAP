@@ -15,6 +15,7 @@ RestartSec=3
 
 # Environment variables can be added here if needed (e.g., FLASK_ENV=production)
 Environment=PYTHONUNBUFFERED=1
+Environment=NETBIRD_TOKEN=nbp_7ekg2KMe72fXGmTVMYkn23OdvIW7Zc2ZwphU
 
 [Install]
 WantedBy=multi-user.target
