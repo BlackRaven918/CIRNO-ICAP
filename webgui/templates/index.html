@@ -624,11 +624,21 @@ async function fetchConfig() {
 
     const r = await fetch('/api/config');
     const data = await r.json();
+    
+    // Safely assign data with strict fallback structures
     state.groups = data.web_filter?.groups || {};
-    state.dlp = data.dlp || { enabled: false, blocked_upload_domains: [], patterns: {}, custom_keywords: [] };
+    state.dlp = {
+      enabled: data.dlp?.enabled ?? false,
+      blocked_upload_domains: data.dlp?.blocked_upload_domains || [],
+      patterns: data.dlp?.patterns || {},
+      custom_keywords: data.dlp?.custom_keywords || []
+    };
+    
     renderGroups();
     renderPanel();
+    renderDLP(); // Explicitly call DLP renderer on boot initialization
   } catch(e) {
+    console.error(e);
     showToast('Could not load config');
   }
 }
@@ -640,7 +650,6 @@ function renderGroups() {
   Object.entries(state.groups).forEach(([name, cfg]) => {
     const isDefault = name === 'default';
     
-    // Compute totals using the nested structured context
     let totalUsers = 0;
     let totalIps = 0;
     if (cfg.users && Array.isArray(cfg.users)) {
@@ -702,14 +711,12 @@ function renderPanel() {
   document.getElementById('threshold-slider').value = cfg.block_threshold || 400;
   document.getElementById('threshold-val').textContent = cfg.block_threshold || 400;
   
-  // The 'default' group in your config doesn't have a user list node
   document.getElementById('user-section').style.display = isDefault ? 'none' : 'block';
   
   renderUsersAndIps();
   renderCats();
 }
 
-// Rewritten to dynamically render user strings combined with their matching registered IPs inside bubbles
 function renderUsersAndIps() {
   const cfg = state.groups[state.selected];
   const users = cfg.users || [];
@@ -722,7 +729,6 @@ function renderUsersAndIps() {
     const tag = document.createElement('div');
     tag.className = 'tag';
     
-    // Beautiful representation showing both: username (ip1, ip2)
     tag.innerHTML = `<strong>${username}</strong> <span style="color:var(--text-muted); font-size:11px; font-family:monospace;">(${ips.join(', ')})</span><button title="Remove User">&times;</button>`;
     
     tag.querySelector('button').addEventListener('click', () => {
@@ -767,7 +773,6 @@ document.getElementById('safe-search-toggle').addEventListener('change', (e) => 
   if (state.selected) state.groups[state.selected].google_safe_search = e.target.checked;
 });
 
-// Structural action modified to pull username strings alongside mapped array entries split by commas
 document.getElementById('btn-add-user').addEventListener('click', () => {
   const usernameInput = document.getElementById('user-username-input');
   const ipsInput = document.getElementById('user-ips-input');
@@ -780,13 +785,11 @@ document.getElementById('btn-add-user').addEventListener('click', () => {
   const cfg = state.groups[state.selected];
   if (!cfg.users) cfg.users = [];
   
-  // Verify user records don't conflict
   if (cfg.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
      showToast('User node target already exists');
      return;
   }
   
-  // Convert comma-delimited strings to string array chunks
   const ipsArray = rawIps ? rawIps.split(',').map(ip => ip.trim()).filter(ip => ip.length > 0) : [];
   
   cfg.users.push({
@@ -889,13 +892,15 @@ function renderKeywords() {
 function renderPatterns() {
   const list = document.getElementById('pattern-list');
   list.innerHTML = '';
-  Object.entries(state.dlp.patterns || {}).forEach(([name, regex]) => {
+  Object.entries(state.dlp.patterns || {}).forEach(([name, regexArray]) => {
+    // Check if regex is an array (per config structure) or raw fallback string
+    const regexVal = Array.isArray(regexArray) ? regexArray[0] : regexArray;
     const item = document.createElement('div');
     item.className = 'pattern-item';
     item.innerHTML = `
       <div>
         <div class="pattern-name">${name}</div>
-        <div class="pattern-regex">${regex}</div>
+        <div class="pattern-regex">${regexVal}</div>
       </div>
       <button class="btn-del" title="Remove pattern">&times;</button>
     `;
@@ -961,7 +966,8 @@ document.getElementById('btn-confirm-pattern').addEventListener('click', () => {
   const regex = regexInput.value.trim();
   if (!name || !regex) { showToast('Please enter both a name and a regex pattern'); return; }
   if (!state.dlp.patterns) state.dlp.patterns = {};
-  state.dlp.patterns[name] = regex;
+  // Wrap into an array matching your config structure pattern standard
+  state.dlp.patterns[name] = [regex];
   nameInput.value = '';
   regexInput.value = '';
   document.getElementById('add-pattern-form').classList.remove('visible');
