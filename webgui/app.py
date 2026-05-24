@@ -159,48 +159,62 @@ def sync_netbird():
         return jsonify({"status": "error", "message": "NETBIRD_TOKEN environment variable is not set"}), 500
 
     try:
-        peers     = netbird_get("peers")
-        users     = netbird_get("users")
-        nb_groups = netbird_get("groups")
+        peers = netbird_get("peers")
+        users = netbird_get("users")
     except requests.RequestException as e:
         return jsonify({"status": "error", "message": f"NetBird API error: {e}"}), 502
 
-    group_id_to_name = {
-        g["id"]: g["name"]
-        for g in nb_groups
-        if g.get("name", "").lower() != "all"
-    }
-
-    user_id_to_info = {
-        u["id"]: {
-            "username": u.get("name") or u.get("id"),
-            "groups": [group_id_to_name[gid] for gid in u.get("auto_groups", []) if gid in group_id_to_name]
-        }
+    # Map user IDs to usernames for a clean display name
+    user_id_to_name = {
+        u["id"]: u.get("name") or u.get("id")
         for u in users
     }
 
     # Structure: { group_name: { username: set(ips) } }
     group_user_ips = {}
+    
     for peer in peers:
-        connection_ip = peer.get("ip", "").strip()
-        if not connection_ip:
+        netbird_ip = peer.get("ip", "").strip()
+        connection_ip = peer.get("connection_ip", "").strip()
+        
+        # Collect valid IPs for this peer, ignoring localhost and zero routes
+        peer_ips = []
+        for ip in [netbird_ip, connection_ip]:
+            if ip and ip not in ["127.0.0.1", "0.0.0.0"]:
+                peer_ips.append(ip)
+                
+        # If no valid IPs remain after filtering, skip this peer
+        if not peer_ips:
             continue
-        user_id = peer.get("user_id", "")
-        if user_id in user_id_to_info:
-            u_info = user_id_to_info[user_id]
-            username = u_info["username"]
-            for g_name in u_info["groups"]:
-                group_user_ips.setdefault(g_name, {}).setdefault(username, set()).add(connection_ip)
+
+        # Resolve username via user_id, fall back to hostname if unassigned
+        user_id = peer.get("user_id")
+        username = user_id_to_name.get(user_id) if user_id else peer.get("hostname") or peer.get("name") or "unknown"
+
+        # Iterate directly through the peer's assigned groups from the payload
+        peer_groups = peer.get("groups", [])
+        for group_obj in peer_groups:
+            group_name = group_obj.get("name", "").strip()
+            
+            # Skip the catch-all group
+            if not group_name or group_name.lower() == "all":
+                continue
+                
+            # Initialize set if group/user combo doesn't exist, then update with collected IPs
+            user_set = group_user_ips.setdefault(group_name, {}).setdefault(username, set())
+            user_set.update(peer_ips)
 
     config = read_config()
     groups = config.setdefault("web_filter", {}).setdefault("groups", {})
     changes = {"created": [], "updated": [], "unchanged": []}
 
     for group_name, users_dict in group_user_ips.items():
+        # Converts the internal set into a cleanly sorted array of strings for the JSON payload
         sorted_users_list = [
             {"username": uname, "ips": sorted(list(ips_set))}
-            for uname, ips_set in sorted_users_list.items()
+            for uname, ips_set in users_dict.items()
         ]
+        
         # Sort user lists by username stably to minimize cosmetic file differences
         sorted_users_list = sorted(sorted_users_list, key=lambda x: x["username"])
 
