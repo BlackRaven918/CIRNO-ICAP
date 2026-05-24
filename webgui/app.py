@@ -17,7 +17,13 @@ DEFAULT_GROUP = {
     "block_threshold": 400,
     "enabled_categories": [],
     "google_safe_search": False,
-    "users": []
+    "users": [],
+    "dlp": {
+        "enabled": False,
+        "blocked_upload_domains": [],
+        "patterns": {},
+        "custom_keywords": []
+    }
 }
 
 
@@ -64,15 +70,8 @@ def save_config():
     incoming = request.json
     existing['web_filter'] = existing.get('web_filter', {})
     existing['web_filter']['groups'] = incoming.get('web_filter', {}).get('groups', existing['web_filter'].get('groups', {}))
-    write_config(existing)
-    reload_icap()
-    return jsonify({"status": "ok"})
-
-
-@app.route('/api/config/dlp', methods=['POST'])
-def save_dlp():
-    existing = read_config()
-    existing['dlp'] = request.json
+    # DLP is now stored per-group inside web_filter.groups; remove legacy top-level dlp key if present
+    existing.pop('dlp', None)
     write_config(existing)
     reload_icap()
     return jsonify({"status": "ok"})

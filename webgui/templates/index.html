@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>J-ICAP — Group Manager</title>
+<title>CIRNO-ICAP — Group Manager</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -24,6 +24,9 @@
     --danger-bg: #fcebeb;
     --success-bg: #e6f7ee;
     --success-text: #1a7a3f;
+    --warn-bg: #fff8e1;
+    --warn-border: #ffe082;
+    --warn-text: #7a5a00;
     --radius: 8px;
     --radius-lg: 12px;
   }
@@ -52,9 +55,7 @@
 
   .topbar-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
   .topbar-title span { color: var(--text-muted); font-weight: 400; }
-
   .topbar-right { display: flex; align-items: center; gap: 10px; }
-
   .topbar-badge {
     font-size: 11px;
     background: var(--info-bg);
@@ -64,39 +65,10 @@
     padding: 2px 10px;
   }
 
-  .nav-tabs {
-    display: flex;
-    gap: 4px;
-    padding: 1.5rem 2rem 0;
-    max-width: 1100px;
-    margin: 0 auto;
-  }
-
-  .nav-tab {
-    padding: 8px 16px;
-    border: 1px solid var(--border);
-    border-bottom: none;
-    border-radius: var(--radius) var(--radius) 0 0;
-    background: var(--bg);
-    color: var(--text-muted);
-    font-size: 13px;
-    cursor: pointer;
-    font-family: inherit;
-  }
-
-  .nav-tab.active {
-    background: var(--surface);
-    color: var(--text);
-    font-weight: 500;
-  }
-
-  .tab-content { display: none; }
-  .tab-content.active { display: block; }
-
   .main {
     max-width: 1100px;
     margin: 0 auto;
-    padding: 0 2rem 2rem;
+    padding: 1.5rem 2rem 2rem;
   }
 
   .main-groups {
@@ -104,10 +76,7 @@
     grid-template-columns: 220px 1fr;
     gap: 16px;
     align-items: start;
-    padding-top: 1.5rem;
   }
-
-  .main-dlp { padding-top: 1.5rem; display: flex; flex-direction: column; gap: 16px; }
 
   .card {
     background: var(--surface);
@@ -219,7 +188,6 @@
   .threshold-label { font-size: 12px; color: var(--text-muted); }
 
   input[type=range] { width: 120px; accent-color: var(--accent); }
-
   .threshold-val { font-size: 13px; font-weight: 600; min-width: 36px; }
 
   .section { margin-bottom: 1.5rem; }
@@ -309,10 +277,8 @@
   }
 
   .btn:hover { background: var(--bg); }
-
   .btn-primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
   .btn-primary:hover { opacity: 0.85; }
-
   .btn-danger { background: var(--danger-bg); color: var(--danger-text); border-color: var(--danger-text); }
   .btn-danger:hover { opacity: 0.85; }
 
@@ -398,12 +364,77 @@
 
   .add-pattern-form.visible { display: flex; }
 
-  .dlp-enabled-row {
+  /* DLP accordion inside group panel */
+  .dlp-accordion {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 0;
+  }
+
+  .dlp-accordion-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 14px;
-    border-bottom: 1px solid var(--border);
+    padding: 10px 14px;
+    cursor: pointer;
+    background: var(--bg);
+    user-select: none;
+    gap: 12px;
+  }
+
+  .dlp-accordion-header:hover { background: #ededeb; }
+
+  .dlp-accordion-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .dlp-enabled-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: var(--success-bg);
+    color: var(--success-text);
+    border: 1px solid #b2dfcc;
+  }
+
+  .dlp-enabled-badge.off {
+    background: var(--bg);
+    color: var(--text-faint);
+    border-color: var(--border-strong);
+  }
+
+  .dlp-chevron {
+    font-size: 11px;
+    color: var(--text-faint);
+    transition: transform 0.18s;
+  }
+
+  .dlp-accordion.open .dlp-chevron { transform: rotate(180deg); }
+
+  .dlp-accordion-body {
+    display: none;
+    padding: 14px;
+    border-top: 1px solid var(--border);
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .dlp-accordion.open .dlp-accordion-body { display: flex; }
+
+  .dlp-subsection { display: flex; flex-direction: column; gap: 8px; }
+
+  .dlp-subsection-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
 
   .toast {
@@ -426,8 +457,7 @@
 
   @media (max-width: 640px) {
     .main-groups { grid-template-columns: 1fr; }
-    .main { padding: 0 1rem 1rem; }
-    .nav-tabs { padding: 1rem 1rem 0; }
+    .main { padding: 1rem 1rem 1rem; }
   }
 </style>
 </head>
@@ -436,16 +466,11 @@
 <div class="topbar">
   <div class="topbar-title">CIRNO-ICAP <span>/ admin</span></div>
   <div class="topbar-right">
-    <div class="topbar-badge">v0.7</div>
+    <div class="topbar-badge">v0.8</div>
   </div>
 </div>
 
-<div class="nav-tabs">
-  <button class="nav-tab active" onclick="switchTab('groups')">Groups</button>
-  <button class="nav-tab" onclick="switchTab('dlp')">DLP</button>
-</div>
-
-<div class="main tab-content active" id="tab-groups">
+<div class="main">
   <div class="main-groups">
     <div>
       <div class="card">
@@ -497,6 +522,63 @@
             <div class="cat-grid" id="cat-grid"></div>
           </div>
 
+          <!-- DLP accordion -->
+          <div class="section">
+            <div class="section-label">Data Loss Prevention</div>
+            <div class="dlp-accordion" id="dlp-accordion">
+              <div class="dlp-accordion-header" id="dlp-accordion-header">
+                <div class="dlp-accordion-title">
+                  <label class="toggle-row" onclick="event.stopPropagation()">
+                    <input type="checkbox" id="dlp-enabled">
+                    <span>Enable DLP for this group</span>
+                  </label>
+                  <span class="dlp-enabled-badge off" id="dlp-badge">Off</span>
+                </div>
+                <span class="dlp-chevron">▼</span>
+              </div>
+              <div class="dlp-accordion-body" id="dlp-accordion-body">
+
+                <div class="dlp-subsection">
+                  <div class="dlp-subsection-label">Blocked Upload Domains</div>
+                  <div class="section-desc" style="margin-bottom:0;">DLP scanning is applied to POST/PUT requests to these domains.</div>
+                  <div class="tag-list" id="dlp-domain-list"></div>
+                  <div class="input-row">
+                    <input type="text" id="dlp-domain-input" placeholder="dropbox.com" style="font-family: 'SF Mono', 'Fira Code', monospace;" />
+                    <button class="btn" id="btn-add-dlp-domain">Add Domain</button>
+                  </div>
+                </div>
+
+                <div class="dlp-subsection">
+                  <div class="dlp-subsection-label">Custom Keywords</div>
+                  <div class="section-desc" style="margin-bottom:0;">Block uploads containing these words or phrases.</div>
+                  <div class="tag-list" id="dlp-keyword-list"></div>
+                  <div class="input-row">
+                    <input type="text" id="dlp-keyword-input" placeholder="confidential" />
+                    <button class="btn" id="btn-add-dlp-keyword">Add Keyword</button>
+                  </div>
+                </div>
+
+                <div class="dlp-subsection">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                    <div class="dlp-subsection-label" style="margin-bottom:0;">Regex Patterns</div>
+                    <button class="btn-icon" id="btn-add-pattern-toggle" title="Add pattern" style="width:22px;height:22px;font-size:16px;">+</button>
+                  </div>
+                  <div class="section-desc" style="margin-bottom:0;">Detect sensitive data like credit cards or IBANs.</div>
+                  <div class="add-pattern-form" id="add-pattern-form">
+                    <input type="text" id="pattern-name-input" placeholder="Pattern name (e.g. Credit Card)" />
+                    <input type="text" id="pattern-regex-input" placeholder="Regex (e.g. \b4[0-9]{12}\b)" style="font-family: 'SF Mono', 'Fira Code', monospace;" />
+                    <div style="display:flex;gap:8px;justify-content:flex-end;">
+                      <button class="btn" id="btn-cancel-pattern">Cancel</button>
+                      <button class="btn btn-primary" id="btn-confirm-pattern">Add Pattern</button>
+                    </div>
+                  </div>
+                  <div class="pattern-list" id="dlp-pattern-list"></div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
           <div class="save-bar">
             <button class="btn" id="btn-copy">Copy JSON</button>
             <button class="btn btn-primary" id="btn-save">Save to server</button>
@@ -507,76 +589,6 @@
   </div>
 </div>
 
-<div class="main tab-content" id="tab-dlp">
-  <div class="main-dlp">
-
-    <div class="card">
-      <div class="dlp-enabled-row">
-        <div>
-          <div style="font-weight:500;font-size:13px;">Data Loss Prevention</div>
-          <div style="font-size:12px;color:var(--text-faint);margin-top:2px;">Scan uploads and POST requests for sensitive content</div>
-        </div>
-        <label class="toggle-row">
-          <input type="checkbox" id="dlp-enabled">
-          <span style="font-size:13px;">Enabled</span>
-        </label>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <span class="card-header-label">Blocked Upload Domains</span>
-      </div>
-      <div class="card-body">
-        <div class="section-desc">DLP scanning is applied to POST/PUT requests to these domains.</div>
-        <div class="tag-list" id="domain-list"></div>
-        <div class="input-row">
-          <input type="text" id="domain-input" placeholder="dropbox.com" style="font-family: 'SF Mono', 'Fira Code', monospace;" />
-          <button class="btn" id="btn-add-domain">Add Domain</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <span class="card-header-label">Custom Keywords</span>
-      </div>
-      <div class="card-body">
-        <div class="section-desc">Block uploads containing these words or phrases.</div>
-        <div class="tag-list" id="keyword-list"></div>
-        <div class="input-row">
-          <input type="text" id="keyword-input" placeholder="confidential" />
-          <button class="btn" id="btn-add-keyword">Add Keyword</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <span class="card-header-label">Regex Patterns</span>
-        <button class="btn-icon" id="btn-add-pattern-toggle" title="Add pattern">+</button>
-      </div>
-      <div class="card-body">
-        <div class="section-desc">Regex patterns to detect sensitive data like credit cards or IBANs.</div>
-        <div class="add-pattern-form" id="add-pattern-form">
-          <input type="text" id="pattern-name-input" placeholder="Pattern name (e.g. Credit Card)" />
-          <input type="text" id="pattern-regex-input" placeholder="Regex (e.g. \b4[0-9]{12}\b)" style="font-family: 'SF Mono', 'Fira Code', monospace;" />
-          <div style="display:flex;gap:8px;justify-content:flex-end;">
-            <button class="btn" id="btn-cancel-pattern">Cancel</button>
-            <button class="btn btn-primary" id="btn-confirm-pattern">Add Pattern</button>
-          </div>
-        </div>
-        <div class="pattern-list" id="pattern-list"></div>
-      </div>
-    </div>
-
-    <div style="display:flex;justify-content:flex-end;gap:8px;">
-      <button class="btn btn-primary" id="btn-save-dlp">Save DLP config</button>
-    </div>
-
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
 
 <script>
@@ -584,24 +596,8 @@ let ALL_CATEGORIES = ['adult','gambling','drugs','illegaldrugs','weapons','viole
 
 let state = {
   groups: {},
-  selected: null,
-  dlp: {
-    enabled: false,
-    blocked_upload_domains: [],
-    patterns: {},
-    custom_keywords: []
-  }
+  selected: null
 };
-
-// --- Tab switching ---
-function switchTab(tab) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.add('active');
-  document.querySelectorAll('.nav-tab').forEach(t => {
-    if (t.textContent.toLowerCase().includes(tab)) t.classList.add('active');
-  });
-}
 
 // --- Toast ---
 function showToast(msg) {
@@ -617,26 +613,22 @@ async function fetchConfig() {
     const catResponse = await fetch('/api/categories');
     if (catResponse.ok) {
       const serverCats = await catResponse.json();
-      if (Array.isArray(serverCats) && serverCats.length > 0) {
-        ALL_CATEGORIES = serverCats;
-      }
+      if (Array.isArray(serverCats) && serverCats.length > 0) ALL_CATEGORIES = serverCats;
     }
 
     const r = await fetch('/api/config');
     const data = await r.json();
-    
-    // Safely assign data with strict fallback structures
     state.groups = data.web_filter?.groups || {};
-    state.dlp = {
-      enabled: data.dlp?.enabled ?? false,
-      blocked_upload_domains: data.dlp?.blocked_upload_domains || [],
-      patterns: data.dlp?.patterns || {},
-      custom_keywords: data.dlp?.custom_keywords || []
-    };
-    
+
+    // Ensure every group has a dlp block (migrate from old flat config if absent)
+    for (const name of Object.keys(state.groups)) {
+      if (!state.groups[name].dlp) {
+        state.groups[name].dlp = { enabled: false, blocked_upload_domains: [], patterns: {}, custom_keywords: [] };
+      }
+    }
+
     renderGroups();
     renderPanel();
-    renderDLP(); // Explicitly call DLP renderer on boot initialization
   } catch(e) {
     console.error(e);
     showToast('Could not load config');
@@ -649,33 +641,26 @@ function renderGroups() {
   list.innerHTML = '';
   Object.entries(state.groups).forEach(([name, cfg]) => {
     const isDefault = name === 'default';
-    
-    let totalUsers = 0;
-    let totalIps = 0;
-    if (cfg.users && Array.isArray(cfg.users)) {
-       totalUsers = cfg.users.length;
-       cfg.users.forEach(u => { totalIps += (u.ips || []).length; });
+    let totalUsers = 0, totalIps = 0;
+    if (Array.isArray(cfg.users)) {
+      totalUsers = cfg.users.length;
+      cfg.users.forEach(u => { totalIps += (u.ips || []).length; });
     }
+    const dlpOn = cfg.dlp?.enabled;
 
     const div = document.createElement('div');
     div.className = 'group-item' + (state.selected === name ? ' active' : '');
     div.innerHTML = `
-      <div style="flex:1;min-width:0; pointer-events: none;"> 
+      <div style="flex:1;min-width:0;pointer-events:none;">
         <div class="group-name">${name}${isDefault ? ' <span style="font-size:10px;color:var(--text-faint);">(default)</span>' : ''}</div>
-        <div class="group-meta">${totalUsers} Users (${totalIps} IPs) &middot; ${(cfg.enabled_categories||[]).length} categories</div>
+        <div class="group-meta">${totalUsers} Users (${totalIps} IPs) &middot; ${(cfg.enabled_categories||[]).length} categories${dlpOn ? ' &middot; DLP on' : ''}</div>
       </div>
       ${isDefault ? '' : '<button class="btn-del" title="Delete group">&times;</button>'}
     `;
-
     div.addEventListener('click', () => selectGroup(name));
-
     if (!isDefault) {
-      div.querySelector('.btn-del').addEventListener('click', (e) => { 
-        e.stopPropagation(); 
-        deleteGroup(name); 
-      });
+      div.querySelector('.btn-del').addEventListener('click', (e) => { e.stopPropagation(); deleteGroup(name); });
     }
-    
     list.appendChild(div);
   });
 }
@@ -710,11 +695,11 @@ function renderPanel() {
   document.getElementById('safe-search-toggle').checked = cfg.google_safe_search || false;
   document.getElementById('threshold-slider').value = cfg.block_threshold || 400;
   document.getElementById('threshold-val').textContent = cfg.block_threshold || 400;
-  
   document.getElementById('user-section').style.display = isDefault ? 'none' : 'block';
-  
+
   renderUsersAndIps();
   renderCats();
+  renderGroupDLP();
 }
 
 function renderUsersAndIps() {
@@ -722,15 +707,12 @@ function renderUsersAndIps() {
   const users = cfg.users || [];
   const list = document.getElementById('user-ip-list');
   list.innerHTML = '';
-  
   users.forEach((userObj, index) => {
     const username = userObj.username || 'unknown';
     const ips = userObj.ips || [];
     const tag = document.createElement('div');
     tag.className = 'tag';
-    
-    tag.innerHTML = `<strong>${username}</strong> <span style="color:var(--text-muted); font-size:11px; font-family:monospace;">(${ips.join(', ')})</span><button title="Remove User">&times;</button>`;
-    
+    tag.innerHTML = `<strong>${username}</strong> <span style="color:var(--text-muted);font-size:11px;font-family:monospace;">(${ips.join(', ')})</span><button title="Remove User">&times;</button>`;
     tag.querySelector('button').addEventListener('click', () => {
       cfg.users.splice(index, 1);
       renderUsersAndIps();
@@ -763,7 +745,84 @@ function renderCats() {
   });
 }
 
-// --- Group View Listeners ---
+// --- Per-group DLP rendering ---
+function getGroupDLP() {
+  const cfg = state.groups[state.selected];
+  if (!cfg.dlp) cfg.dlp = { enabled: false, blocked_upload_domains: [], patterns: {}, custom_keywords: [] };
+  return cfg.dlp;
+}
+
+function renderGroupDLP() {
+  const dlp = getGroupDLP();
+  const enabled = dlp.enabled || false;
+
+  // Sync toggle + badge
+  document.getElementById('dlp-enabled').checked = enabled;
+  const badge = document.getElementById('dlp-badge');
+  badge.textContent = enabled ? 'On' : 'Off';
+  badge.className = 'dlp-enabled-badge' + (enabled ? '' : ' off');
+
+  renderDLPDomains();
+  renderDLPKeywords();
+  renderDLPPatterns();
+}
+
+function renderDLPDomains() {
+  const dlp = getGroupDLP();
+  const list = document.getElementById('dlp-domain-list');
+  list.innerHTML = '';
+  (dlp.blocked_upload_domains || []).forEach(domain => {
+    const tag = document.createElement('div');
+    tag.className = 'tag mono';
+    tag.innerHTML = `${domain}<button title="Remove">&times;</button>`;
+    tag.querySelector('button').addEventListener('click', () => {
+      dlp.blocked_upload_domains = dlp.blocked_upload_domains.filter(d => d !== domain);
+      renderDLPDomains();
+    });
+    list.appendChild(tag);
+  });
+}
+
+function renderDLPKeywords() {
+  const dlp = getGroupDLP();
+  const list = document.getElementById('dlp-keyword-list');
+  list.innerHTML = '';
+  (dlp.custom_keywords || []).forEach(kw => {
+    const tag = document.createElement('div');
+    tag.className = 'tag';
+    tag.innerHTML = `${kw}<button title="Remove">&times;</button>`;
+    tag.querySelector('button').addEventListener('click', () => {
+      dlp.custom_keywords = dlp.custom_keywords.filter(k => k !== kw);
+      renderDLPKeywords();
+    });
+    list.appendChild(tag);
+  });
+}
+
+function renderDLPPatterns() {
+  const dlp = getGroupDLP();
+  const list = document.getElementById('dlp-pattern-list');
+  list.innerHTML = '';
+  Object.entries(dlp.patterns || {}).forEach(([name, regexArray]) => {
+    const regexVal = Array.isArray(regexArray) ? regexArray[0] : regexArray;
+    const item = document.createElement('div');
+    item.className = 'pattern-item';
+    item.innerHTML = `
+      <div>
+        <div class="pattern-name">${name}</div>
+        <div class="pattern-regex">${regexVal}</div>
+      </div>
+      <button class="btn-del" title="Remove pattern">&times;</button>
+    `;
+    item.querySelector('.btn-del').addEventListener('click', () => {
+      delete dlp.patterns[name];
+      renderDLPPatterns();
+    });
+    list.appendChild(item);
+  });
+}
+
+// --- Group panel listeners ---
 document.getElementById('threshold-slider').addEventListener('input', (e) => {
   document.getElementById('threshold-val').textContent = e.target.value;
   if (state.selected) state.groups[state.selected].block_threshold = parseInt(e.target.value);
@@ -776,27 +835,14 @@ document.getElementById('safe-search-toggle').addEventListener('change', (e) => 
 document.getElementById('btn-add-user').addEventListener('click', () => {
   const usernameInput = document.getElementById('user-username-input');
   const ipsInput = document.getElementById('user-ips-input');
-  
   const username = usernameInput.value.trim();
   const rawIps = ipsInput.value.trim();
-  
   if (!username) { showToast('Username field is required'); return; }
-  
   const cfg = state.groups[state.selected];
   if (!cfg.users) cfg.users = [];
-  
-  if (cfg.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-     showToast('User node target already exists');
-     return;
-  }
-  
+  if (cfg.users.some(u => u.username.toLowerCase() === username.toLowerCase())) { showToast('User already exists'); return; }
   const ipsArray = rawIps ? rawIps.split(',').map(ip => ip.trim()).filter(ip => ip.length > 0) : [];
-  
-  cfg.users.push({
-     username: username,
-     ips: ipsArray
-  });
-  
+  cfg.users.push({ username, ips: ipsArray });
   usernameInput.value = '';
   ipsInput.value = '';
   renderUsersAndIps();
@@ -814,7 +860,10 @@ document.getElementById('btn-confirm-add').addEventListener('click', () => {
   const name = input.value.trim();
   if (!name) return;
   if (state.groups[name]) { showToast('Group already exists'); return; }
-  state.groups[name] = { users: [], block_threshold: 400, enabled_categories: [], google_safe_search: false };
+  state.groups[name] = {
+    users: [], block_threshold: 400, enabled_categories: [], google_safe_search: false,
+    dlp: { enabled: false, blocked_upload_domains: [], patterns: {}, custom_keywords: [] }
+  };
   input.value = '';
   document.getElementById('add-group-form').classList.remove('visible');
   renderGroups();
@@ -826,6 +875,82 @@ document.getElementById('new-group-name').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('btn-confirm-add').click();
 });
 
+// --- DLP accordion toggle ---
+document.getElementById('dlp-accordion-header').addEventListener('click', () => {
+  document.getElementById('dlp-accordion').classList.toggle('open');
+});
+
+// --- DLP listeners ---
+document.getElementById('dlp-enabled').addEventListener('change', (e) => {
+  const dlp = getGroupDLP();
+  dlp.enabled = e.target.checked;
+  const badge = document.getElementById('dlp-badge');
+  badge.textContent = dlp.enabled ? 'On' : 'Off';
+  badge.className = 'dlp-enabled-badge' + (dlp.enabled ? '' : ' off');
+  renderGroups();
+});
+
+document.getElementById('btn-add-dlp-domain').addEventListener('click', () => {
+  const input = document.getElementById('dlp-domain-input');
+  const domain = input.value.trim();
+  if (!domain) return;
+  const dlp = getGroupDLP();
+  if (!dlp.blocked_upload_domains) dlp.blocked_upload_domains = [];
+  if (dlp.blocked_upload_domains.includes(domain)) { showToast('Domain already listed'); return; }
+  dlp.blocked_upload_domains.push(domain);
+  input.value = '';
+  renderDLPDomains();
+});
+
+document.getElementById('dlp-domain-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btn-add-dlp-domain').click();
+});
+
+document.getElementById('btn-add-dlp-keyword').addEventListener('click', () => {
+  const input = document.getElementById('dlp-keyword-input');
+  const kw = input.value.trim();
+  if (!kw) return;
+  const dlp = getGroupDLP();
+  if (!dlp.custom_keywords) dlp.custom_keywords = [];
+  if (dlp.custom_keywords.includes(kw)) { showToast('Keyword already listed'); return; }
+  dlp.custom_keywords.push(kw);
+  input.value = '';
+  renderDLPKeywords();
+});
+
+document.getElementById('dlp-keyword-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btn-add-dlp-keyword').click();
+});
+
+document.getElementById('btn-add-pattern-toggle').addEventListener('click', () => {
+  const form = document.getElementById('add-pattern-form');
+  form.classList.toggle('visible');
+  if (form.classList.contains('visible')) document.getElementById('pattern-name-input').focus();
+});
+
+document.getElementById('btn-cancel-pattern').addEventListener('click', () => {
+  document.getElementById('add-pattern-form').classList.remove('visible');
+  document.getElementById('pattern-name-input').value = '';
+  document.getElementById('pattern-regex-input').value = '';
+});
+
+document.getElementById('btn-confirm-pattern').addEventListener('click', () => {
+  const nameInput = document.getElementById('pattern-name-input');
+  const regexInput = document.getElementById('pattern-regex-input');
+  const name = nameInput.value.trim();
+  const regex = regexInput.value.trim();
+  if (!name || !regex) { showToast('Please enter both a name and a regex pattern'); return; }
+  const dlp = getGroupDLP();
+  if (!dlp.patterns) dlp.patterns = {};
+  dlp.patterns[name] = [regex];
+  nameInput.value = '';
+  regexInput.value = '';
+  document.getElementById('add-pattern-form').classList.remove('visible');
+  renderDLPPatterns();
+  showToast(`Added pattern "${name}"`);
+});
+
+// --- Save ---
 function buildGroupConfig() {
   return { web_filter: { groups: state.groups } };
 }
@@ -851,146 +976,6 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   }
 });
 
-// --- DLP Tab Operations ---
-function renderDLP() {
-  document.getElementById('dlp-enabled').checked = state.dlp.enabled || false;
-  renderDomains();
-  renderKeywords();
-  renderPatterns();
-}
-
-function renderDomains() {
-  const list = document.getElementById('domain-list');
-  list.innerHTML = '';
-  (state.dlp.blocked_upload_domains || []).forEach(domain => {
-    const tag = document.createElement('div');
-    tag.className = 'tag mono';
-    tag.innerHTML = `${domain}<button title="Remove">&times;</button>`;
-    tag.querySelector('button').addEventListener('click', () => {
-      state.dlp.blocked_upload_domains = state.dlp.blocked_upload_domains.filter(d => d !== domain);
-      renderDomains();
-    });
-    list.appendChild(tag);
-  });
-}
-
-function renderKeywords() {
-  const list = document.getElementById('keyword-list');
-  list.innerHTML = '';
-  (state.dlp.custom_keywords || []).forEach(kw => {
-    const tag = document.createElement('div');
-    tag.className = 'tag';
-    tag.innerHTML = `${kw}<button title="Remove">&times;</button>`;
-    tag.querySelector('button').addEventListener('click', () => {
-      state.dlp.custom_keywords = state.dlp.custom_keywords.filter(k => k !== kw);
-      renderKeywords();
-    });
-    list.appendChild(tag);
-  });
-}
-
-function renderPatterns() {
-  const list = document.getElementById('pattern-list');
-  list.innerHTML = '';
-  Object.entries(state.dlp.patterns || {}).forEach(([name, regexArray]) => {
-    // Check if regex is an array (per config structure) or raw fallback string
-    const regexVal = Array.isArray(regexArray) ? regexArray[0] : regexArray;
-    const item = document.createElement('div');
-    item.className = 'pattern-item';
-    item.innerHTML = `
-      <div>
-        <div class="pattern-name">${name}</div>
-        <div class="pattern-regex">${regexVal}</div>
-      </div>
-      <button class="btn-del" title="Remove pattern">&times;</button>
-    `;
-    item.querySelector('.btn-del').addEventListener('click', () => {
-      delete state.dlp.patterns[name];
-      renderPatterns();
-    });
-    list.appendChild(item);
-  });
-}
-
-// --- DLP View Listeners ---
-document.getElementById('dlp-enabled').addEventListener('change', (e) => {
-  state.dlp.enabled = e.target.checked;
-});
-
-document.getElementById('btn-add-domain').addEventListener('click', () => {
-  const input = document.getElementById('domain-input');
-  const domain = input.value.trim();
-  if (!domain) return;
-  if (!state.dlp.blocked_upload_domains) state.dlp.blocked_upload_domains = [];
-  if (state.dlp.blocked_upload_domains.includes(domain)) { showToast('Domain already listed'); return; }
-  state.dlp.blocked_upload_domains.push(domain);
-  input.value = '';
-  renderDomains();
-});
-
-document.getElementById('domain-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('btn-add-domain').click();
-});
-
-document.getElementById('btn-add-keyword').addEventListener('click', () => {
-  const input = document.getElementById('keyword-input');
-  const kw = input.value.trim();
-  if (!kw) return;
-  if (!state.dlp.custom_keywords) state.dlp.custom_keywords = [];
-  if (state.dlp.custom_keywords.includes(kw)) { showToast('Keyword already listed'); return; }
-  state.dlp.custom_keywords.push(kw);
-  input.value = '';
-  renderKeywords();
-});
-
-document.getElementById('keyword-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('btn-add-keyword').click();
-});
-
-document.getElementById('btn-add-pattern-toggle').addEventListener('click', () => {
-  const form = document.getElementById('add-pattern-form');
-  form.classList.toggle('visible');
-  if (form.classList.contains('visible')) document.getElementById('pattern-name-input').focus();
-});
-
-document.getElementById('btn-cancel-pattern').addEventListener('click', () => {
-  document.getElementById('add-pattern-form').classList.remove('visible');
-  document.getElementById('pattern-name-input').value = '';
-  document.getElementById('pattern-regex-input').value = '';
-});
-
-document.getElementById('btn-confirm-pattern').addEventListener('click', () => {
-  const nameInput = document.getElementById('pattern-name-input');
-  const regexInput = document.getElementById('pattern-regex-input');
-  const name = nameInput.value.trim();
-  const regex = regexInput.value.trim();
-  if (!name || !regex) { showToast('Please enter both a name and a regex pattern'); return; }
-  if (!state.dlp.patterns) state.dlp.patterns = {};
-  // Wrap into an array matching your config structure pattern standard
-  state.dlp.patterns[name] = [regex];
-  nameInput.value = '';
-  regexInput.value = '';
-  document.getElementById('add-pattern-form').classList.remove('visible');
-  renderPatterns();
-  showToast(`Added pattern "${name}"`);
-});
-
-document.getElementById('btn-save-dlp').addEventListener('click', async () => {
-  try {
-    const r = await fetch('/api/config/dlp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(state.dlp)
-    });
-    const data = await r.json();
-    if (data.status === 'ok') showToast('DLP configuration saved and reloaded');
-    else showToast('DLP save failed');
-  } catch(e) {
-    showToast('Could not reach server');
-  }
-});
-
-// Initial boot initialization
 fetchConfig();
 </script>
 </body>

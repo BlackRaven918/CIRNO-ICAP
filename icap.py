@@ -198,26 +198,36 @@ def load_config():
             users = cfg.get("users", [])
             # Flatten all IPs from all users for quick lookup
             all_ips = [ip for user in users for ip in user.get("ips", [])]
+
+            # Load per-group DLP config (falls back to disabled if not set)
+            group_dlp_raw = cfg.get("dlp", {})
+            group_dlp_config = {
+                "enabled": group_dlp_raw.get("enabled", False),
+                "blocked_upload_domains": [d.lower() for d in group_dlp_raw.get("blocked_upload_domains", [])],
+                "custom_keywords": [k.lower() for k in group_dlp_raw.get("custom_keywords", [])]
+            }
+            group_dlp_patterns = {}
+            for category, patterns in group_dlp_raw.get("patterns", {}).items():
+                group_dlp_patterns[category] = [re.compile(p) for p in patterns]
+
             GROUPS[name] = {
                 "users": users,
                 "ips": all_ips,  # flattened for quick IP lookup
                 "block_threshold": cfg.get("block_threshold", 100),
                 "enabled_categories": [c.lower() for c in cfg.get("enabled_categories", [])],
-                "google_safe_search": cfg.get("google_safe_search", False)
+                "google_safe_search": cfg.get("google_safe_search", False),
+                "dlp_config": group_dlp_config,
+                "dlp_patterns": group_dlp_patterns
             }
+            print(f"[INFO] Group '{name}': DLP enabled={group_dlp_config['enabled']}, "
+                  f"{len(group_dlp_patterns)} pattern categories, "
+                  f"{len(group_dlp_config['blocked_upload_domains'])} upload domains")
         print(f"[INFO] Loaded {len(GROUPS)} groups: {list(GROUPS.keys())}")
 
-        # Load DLP
-        dlp = config.get("dlp", {})
-        DLP_CONFIG = {
-            "enabled": dlp.get("enabled", False),
-            "blocked_upload_domains": [d.lower() for d in dlp.get("blocked_upload_domains", [])],
-            "custom_keywords": [k.lower() for k in dlp.get("custom_keywords", [])]
-        }
+        # Keep global DLP_CONFIG/DLP_PATTERNS as empty defaults (per-group DLP is now used)
+        DLP_CONFIG = {"enabled": False, "blocked_upload_domains": [], "custom_keywords": []}
         DLP_PATTERNS = {}
-        for category, patterns in dlp.get("patterns", {}).items():
-            DLP_PATTERNS[category] = [re.compile(p) for p in patterns]
-        print(f"[INFO] DLP loaded - {len(DLP_PATTERNS)} pattern categories, {len(DLP_CONFIG['blocked_upload_domains'])} upload domains")
+        print(f"[INFO] DLP is now configured per-group")
 
         # Load safe search
         SAFE_SEARCH_CONFIG = config.get("safe_search", {"enabled": False, "safe_search_domains": []})
@@ -271,8 +281,11 @@ def load_config():
     print(f"[INFO] Config reloaded - {len(KEYWORD_CATEGORIES)} keyword categories, {len(BLOCKED_URL_CATEGORIES)} URL categories")
     build_automatons()
 
-def scan_for_dlp(body, content_type):
-    #print(f"[DLP DEBUG] content_type: {content_type}")
+def scan_for_dlp(body, content_type, dlp_config=None, dlp_patterns=None):
+    if dlp_config is None:
+        dlp_config = DLP_CONFIG
+    if dlp_patterns is None:
+        dlp_patterns = DLP_PATTERNS    #print(f"[DLP DEBUG] content_type: {content_type}")
     #print(f"[DLP DEBUG] body preview: {body[:500]}")
     findings = []
     texts_to_scan = []
@@ -339,7 +352,7 @@ def scan_for_dlp(body, content_type):
         text_lower = text.lower()
 
         # Regex patterns
-        for category, patterns in DLP_PATTERNS.items():
+        for category, patterns in dlp_patterns.items():
             if category in [f[0] for f in findings]:
                 continue  # already found this category
             for pattern in patterns:
@@ -349,7 +362,7 @@ def scan_for_dlp(body, content_type):
                     break
 
         # Custom keywords
-        for keyword in DLP_CONFIG.get("custom_keywords", []):
+        for keyword in dlp_config.get("custom_keywords", []):
             if keyword in text_lower:
                 if f"keyword: {keyword}" not in findings:
                     print(f"[DLP] Keyword matched: {keyword}")
@@ -582,14 +595,16 @@ class KeywordFilter(BaseICAPRequestHandler):
                     return
 
         # DLP scanning on POST requests to upload domains
-        if DLP_CONFIG.get("enabled") and method in ('POST', 'PUT', 'PATCH') and body:
+        group_dlp_config = group_cfg.get("dlp_config", DLP_CONFIG)
+        group_dlp_patterns = group_cfg.get("dlp_patterns", DLP_PATTERNS)
+        if group_dlp_config.get("enabled") and method in ('POST', 'PUT', 'PATCH') and body:
             print(f"[DLP DEBUG] {method} to {url} | content-type: {content_type} | size: {len(body)}")
             is_upload_domain = any(
-                d in url.lower() for d in DLP_CONFIG["blocked_upload_domains"]
+                d in url.lower() for d in group_dlp_config["blocked_upload_domains"]
             )
             if is_upload_domain:
                 print(f"[DLP] Scanning POST to {url} | {len(body)} bytes")
-                findings = scan_for_dlp(body, content_type)
+                findings = scan_for_dlp(body, content_type, group_dlp_config, group_dlp_patterns)
                 if findings:
                     print(f"[DLP BLOCKED] Client: {client_ip} | URL: {url} | Findings: {findings}")
                     block_page = DLP_BLOCK_PAGE_TEMPLATE.format(
