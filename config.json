@@ -50,7 +50,8 @@
             "clients6.google.com",
             "drivefrontend-pa.clients6.google.com",
             "upload.googleapis.com",
-            "dlptest.com"
+            "dlptest.com",
+            "claude.ai"
         ],
         "patterns": {
             "Credit Card": ["\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\\b"],

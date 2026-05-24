@@ -255,7 +255,7 @@ def load_config():
                 KEYWORD_CATEGORIES[category] = list(all_phrases.keys())
                 KEYWORD_SCORES[category] = all_phrases
                 GOOD_SCORES[category] = good_phrases
-                print(f"[INFO] Loaded {len(all_phrases)} phrases and {len(good_phrases)} good phrases for category: {category}")
+                #print(f"[INFO] Loaded {len(all_phrases)} phrases and {len(good_phrases)} good phrases for category: {category}")
 
     if os.path.exists(DOMAINLIST_DIR):
         for filename in os.listdir(DOMAINLIST_DIR):
@@ -266,12 +266,14 @@ def load_config():
             domains = list(load_e2guardian_list(filepath).keys())
             if domains:
                 BLOCKED_URL_CATEGORIES[category] = domains
-                print(f"[INFO] Loaded {len(domains)} domains for category: {category}")
+                #print(f"[INFO] Loaded {len(domains)} domains for category: {category}")
 
     print(f"[INFO] Config reloaded - {len(KEYWORD_CATEGORIES)} keyword categories, {len(BLOCKED_URL_CATEGORIES)} URL categories")
     build_automatons()
 
 def scan_for_dlp(body, content_type):
+    #print(f"[DLP DEBUG] content_type: {content_type}")
+    #print(f"[DLP DEBUG] body preview: {body[:500]}")
     findings = []
     texts_to_scan = []
 
@@ -279,14 +281,11 @@ def scan_for_dlp(body, content_type):
         if 'application/x-www-form-urlencoded' in content_type:
             from urllib.parse import unquote_plus
             texts_to_scan.append(unquote_plus(body.decode('utf-8', errors='ignore')))
-        
-        
 
-        elif 'multipart/form-data' in content_type:
+        elif 'multipart/form-data' in content_type or 'multipart/related' in content_type:
             parts = parse_multipart(body, content_type)
-            for part_type, content, headers in parts:
+            for part_type, content, headers in parts:  # ← was missing for multipart/related
                 if part_type == 'file':
-                    # Scan file contents
                     filename = ''
                     for h in headers.split(';'):
                         h = h.strip()
@@ -295,40 +294,45 @@ def scan_for_dlp(body, content_type):
 
                     print(f"[DLP] Scanning file upload: {filename} | {len(content)} bytes")
 
-                    # Scan with ClamAV if available
                     if cd is not None:
                         status, reason = scan_with_clamav(content)
                         if status == 'FOUND':
-                            # print(f"[DLP] Virus in upload: {reason} | file: {filename}")
                             findings.append(f"Virus: {reason} in {filename}")
 
-                    # Try to read as text for keyword/pattern scanning
-                    # Works for .txt, .csv, .html, .xml, .json, .py etc
                     try:
                         file_text = content.decode('utf-8', errors='ignore')
-                        if file_text.isprintable() or sum(c.isprintable() for c in file_text) / max(len(file_text), 1) > 0.8:
+                        if sum(c.isprintable() for c in file_text) / max(len(file_text), 1) > 0.8:
                             texts_to_scan.append(file_text)
-                            print(f"[DLP] Added text file to scan: {filename}")
-                    except:
+                            #print(f"[DLP] Added text file to scan: {filename}")
+                    except Exception:
                         pass
-
                 else:
-                    # Form field
                     texts_to_scan.append(content.decode('utf-8', errors='ignore'))
-        elif 'multipart/related' in content_type or 'multipart/form-data' in content_type:
-            parts = parse_multipart(body, content_type)
-        elif 'application/json' in content_type or 'protobuf' in content_type:
+
+        elif 'application/json' in content_type:
             try:
                 import json
                 data = json.loads(body.decode('utf-8', errors='ignore'))
-                texts_to_scan.append(decode_body_recursive(data))
-            except:
-                # protobuf fallback - just scan raw bytes as text
+                extracted = decode_body_recursive(data)
+                texts_to_scan.append(extracted)
+                #print(f"[DLP] Extracted {len(extracted)} chars from JSON body")
+            except Exception as e:
+                #print(f"[DLP] JSON parse failed, falling back to raw: {e}")
                 texts_to_scan.append(body.decode('utf-8', errors='ignore'))
+
+        elif 'protobuf' in content_type or 'application/octet-stream' in content_type:
+            # Scan raw bytes as text — catches plaintext fields in binary formats
+            texts_to_scan.append(body.decode('utf-8', errors='ignore'))
+
+        else:
+            # Unknown content type — scan raw as fallback, don't skip
+            print(f"[DLP] Unknown content-type '{content_type}', scanning raw body")
+            texts_to_scan.append(body.decode('utf-8', errors='ignore'))
 
     except Exception as e:
         print(f"[DLP] Parse error: {e}")
-        return []
+        # Don't return [] — still try scanning whatever we have
+        texts_to_scan.append(body.decode('utf-8', errors='ignore'))
 
     # Scan all collected text
     for text in texts_to_scan:
@@ -354,16 +358,20 @@ def scan_for_dlp(body, content_type):
     return findings
 
 def decode_body_recursive(obj):
-    """Recursively extract all string values from nested JSON"""
     text = ""
     if isinstance(obj, str):
-        # Try base64 decode
-        try:
-            decoded = base64.b64decode(obj + "==").decode('utf-8', errors='ignore')
-            if decoded.isprintable():
-                text += decoded + " "
-        except:
-            pass
+        # Try base64 decode — FIX: isprintable() is too strict
+        # '\n', '\t', '\r' all fail isprintable() but are valid text
+        if len(obj) > 50:  # skip short strings, unlikely to be encoded files
+            try:
+                decoded = base64.b64decode(obj + "==").decode('utf-8', errors='ignore')
+                # Use printable ratio instead of isprintable()
+                printable_ratio = sum(c.isprintable() or c in '\n\r\t' for c in decoded) / max(len(decoded), 1)
+                if printable_ratio > 0.7:
+                    text += decoded + " "
+                    #print(f"[DLP] base64 decoded {len(obj)} → {len(decoded)} chars")
+            except Exception:
+                pass
         text += obj + " "
     elif isinstance(obj, dict):
         for val in obj.values():
@@ -384,7 +392,7 @@ def get_group_config(client_ip):
                 if client_ip in user.get("ips", []):
                     username = user["username"]
                     break
-            print(f"[DEBUG] Client {client_ip} matched group: {group_name} | user: {username}")
+            #print(f"[DEBUG] Client {client_ip} matched group: {group_name} | user: {username}")
             return group_cfg, group_name, username
 
     if 'default' in GROUPS:
@@ -680,7 +688,7 @@ class KeywordFilter(BaseICAPRequestHandler):
         should_scan = body and cd is not None and not any(ct in content_type for ct in SKIP_SCAN_TYPES)
 
         if should_scan:
-            print(f"[DEBUG] Sending to ClamAV: {content_type} | {len(body)} bytes")
+            #print(f"[DEBUG] Sending to ClamAV: {content_type} | {len(body)} bytes")
             if len(body) <= MAX_SCAN_SIZE:
                 status, reason = scan_with_clamav(body)
                 if status == 'FOUND':
