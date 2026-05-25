@@ -27,7 +27,27 @@ else
     useradd -r -s /usr/sbin/nologin $SERVICE_USER
 fi
 
-# 3. Prepare Installation Directory
+# 3. Create Log Directory
+echo "Setting up log directory..."
+mkdir -p /var/log/$APP_NAME
+chown $SERVICE_USER:$SERVICE_USER /var/log/$APP_NAME
+chmod 755 /var/log/$APP_NAME
+
+# 3b. Setup Logrotate
+echo "Configuring logrotate..."
+cat > /etc/logrotate.d/cirno-icap << EOF
+/var/log/$APP_NAME/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 $SERVICE_USER $SERVICE_USER
+}
+EOF
+
+# 4. Prepare Installation Directory
 echo "Setting up directory at $INSTALL_DIR"
 mkdir -p $INSTALL_DIR
 cp -r . $INSTALL_DIR/
@@ -36,13 +56,13 @@ cp -r . $INSTALL_DIR/
 chown -R $SERVICE_USER:$SERVICE_USER $INSTALL_DIR
 chmod -R 755 $INSTALL_DIR
 
-# 4. Setup Virtual Environment
+# 5. Setup Virtual Environment
 echo "Creating Python virtual environment..."
 sudo -u $SERVICE_USER $PYTHON_BIN -m venv $INSTALL_DIR/venv
 sudo -u $SERVICE_USER $INSTALL_DIR/venv/bin/pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --upgrade pip
 sudo -u $SERVICE_USER $INSTALL_DIR/venv/bin/pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r $INSTALL_DIR/requirements.txt
 
-# 5. Apply the pyicap Patch
+# 6. Apply the pyicap Patch
 echo "Applying pyicap.py collections fix..."
 PYICAP_PATH=$(find $INSTALL_DIR/venv/lib -name "pyicap.py")
 if [ -f "$PYICAP_PATH" ]; then
@@ -52,7 +72,7 @@ else
     echo "Warning: pyicap.py not found, patch skipped."
 fi
 
-# 6. Configure ClamAV
+# 7. Configure ClamAV
 echo "Configuring ClamAV..."
 systemctl stop clamav-freshclam
 freshclam || echo "Freshclam update failed, continuing anyway..."
@@ -63,7 +83,7 @@ systemctl restart clamav-daemon
 # Add the service user to the clamav group
 usermod -aG clamav $SERVICE_USER
 
-# 7. Setup Sudoers Rule for GUI Reload
+# 8. Setup Sudoers Rule for GUI Reload
 # This allows the GUI (running as 'cirno') to restart the ICAP service
 echo "Configuring sudoers permissions for service management..."
 SUDOERS_FILE="/etc/sudoers.d/cirno-icap"
@@ -71,7 +91,7 @@ echo "$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl kill -s USR1 CIRNO-IC
 echo "$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart CIRNO-ICAP" >> $SUDOERS_FILE
 chmod 440 $SUDOERS_FILE
 
-# 8. Setup Systemd Services
+# 9. Setup Systemd Services
 echo "Configuring systemd services..."
 
 install_service() {
@@ -94,7 +114,7 @@ install_service() {
 install_service "CIRNO-ICAP.service"
 install_service "CIRNO-ICAP-gui.service"
 
-# 9. Reload and Start
+# 10. Reload and Start
 echo "Starting services..."
 systemctl daemon-reload
 systemctl enable CIRNO-ICAP CIRNO-ICAP-gui

@@ -10,16 +10,22 @@ import clamd
 import io
 import base64
 import email as email_lib
-
-
+import logging
+import logging.handlers
+import json as json_module
 from pyicap import ICAPServer, BaseICAPRequestHandler
+from datetime import datetime, timezone
+
 import base64
+
 # --- Config ---
 CONFIG_DIR = "/opt/CIRNO-ICAP"
 PHRASELIST_DIR = f"{CONFIG_DIR}/phraselist"
 DOMAINLIST_DIR = f"{CONFIG_DIR}/domainlist"
 CONFIG_FILE = f"{CONFIG_DIR}/config.json"
 MAX_SCAN_SIZE = 25 * 1024 * 1024
+LOG_FILE = "/var/log/CIRNO-ICAP/icap.log"
+
 
 KEYWORD_CATEGORIES = {}
 BLOCKED_URL_CATEGORIES = {}
@@ -30,6 +36,26 @@ GOOD_AUTOMATONS = {}
 DLP_CONFIG = {}
 DLP_PATTERNS = {}
 
+# --- Logging setup ---
+logger = logging.getLogger('CIRNO-ICAP')
+logger.setLevel(logging.INFO)
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+
+
+
+# Rotating file handler - 10MB per file, keep 5 files
+file_handler = logging.handlers.RotatingFileHandler(
+    LOG_FILE,
+    maxBytes=10 * 1024 * 1024,  # 10MB
+    backupCount=5
+)
+file_handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
+logger.addHandler(file_handler)
+
+
+stdout_handler = logging.StreamHandler()
+stdout_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+logger.addHandler(stdout_handler)
 
 def load_block_pages():
     global URL_BLOCK_PAGE_TEMPLATE, BLOCK_PAGE_TEMPLATE, VIRUS_BLOCK_PAGE_TEMPLATE, DLP_BLOCK_PAGE_TEMPLATE
@@ -99,6 +125,22 @@ def load_block_pages():
         </html>
     """
 
+def log_event(action, trigger, client_ip, user="unknown", group="unknown",
+              category=None, score=None, url=None, detail=None):
+    payload = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "action": action,
+        "trigger": trigger,
+        "client_ip": client_ip,
+        "user": user,
+        "group": group,
+        "url": url,
+        "category": category,
+        "score": score,
+        "detail": detail
+    }
+    payload = {k: v for k, v in payload.items() if v is not None}
+    logger.info(json_module.dumps(payload))
 
 def load_e2guardian_list(filepath):
     phrases = {}  # {phrase: score}
@@ -606,7 +648,15 @@ class KeywordFilter(BaseICAPRequestHandler):
                 #print(f"[DLP] Scanning POST to {url} | {len(body)} bytes")
                 findings = scan_for_dlp(body, content_type, group_dlp_config, group_dlp_patterns)
                 if findings:
-                    print(f"[DLP BLOCKED] Client: {client_ip} | User: {username} | Group: {group_name} | URL: {url} | Findings: {findings}")
+                    log_event(
+                        action="BLOCKED",
+                        trigger="DLP",
+                        client_ip=client_ip,
+                        user=username,
+                        group=group_name,
+                        url=url,
+                        detail=", ".join(findings)
+                    )
                     block_page = DLP_BLOCK_PAGE_TEMPLATE.format(
                         url=url,
                         findings=", ".join(findings)
@@ -707,7 +757,15 @@ class KeywordFilter(BaseICAPRequestHandler):
             if len(body) <= MAX_SCAN_SIZE:
                 status, reason = scan_with_clamav(body)
                 if status == 'FOUND':
-                    print(f"[BLOCKED] Virus found: {reason} | URL: {url}")
+                    log_event(
+                        action="BLOCKED",
+                        trigger="CLAMAV",
+                        client_ip=client_ip,
+                        user=username,
+                        group=group_name,
+                        url=url,
+                        detail=reason
+                    )
                     block_page = VIRUS_BLOCK_PAGE_TEMPLATE.format(
                         url=url,
                         virus=reason
@@ -748,10 +806,19 @@ class KeywordFilter(BaseICAPRequestHandler):
                         total_score -= score
                         matched_good.append(f"{keyword} (-{score})")
 
-                #print(f"[DEBUG] Client: {client_ip} | Category: {category} | Score: {total_score} | Threshold: {block_threshold} | Bad: {matched_keywords[:5]} | Good: {matched_good[:5]}")
 
                 if total_score >= block_threshold:
-                    print(f"[BLOCKED] Client-ip: {client_ip} | User: {username} | Group: {group_name} | Category: {category} | Score: {total_score}")
+                    log_event(
+                        action="BLOCKED",
+                        trigger="KEYWORD",
+                        client_ip=client_ip,
+                        user=username,
+                        group=group_name,
+                        category=category,
+                        score=total_score,
+                        url=url,
+                        detail=", ".join(matched_keywords[:5])
+                    )
                     block_page = BLOCK_PAGE_TEMPLATE.format(
                         category=category,
                         keyword=", ".join(matched_keywords[:10]),
