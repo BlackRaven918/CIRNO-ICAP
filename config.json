@@ -12,12 +12,8 @@
                 "google_safe_search": false,
                 "users": [
                     {
-                        "username": "alice",
-                        "ips": ["100.88.1.1", "192.168.10.20"]
-                    },
-                    {
-                        "username": "bob",
-                        "ips": ["100.88.1.2", "192.168.10.21"]
+                        "username": "student-name",
+                        "ips": ["192.168.11.53"]
                     }
                 ],
                 "dlp": {
@@ -55,8 +51,8 @@
                 "google_safe_search": true,
                 "users": [
                     {
-                        "username": "jasper",
-                        "ips": ["100.88.2.1", "192.168.11.211"]
+                        "username": "teacher-name",
+                        "ips": ["192.168.11.80"]
                     }
                 ],
                 "dlp": {

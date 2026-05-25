@@ -532,7 +532,7 @@ class KeywordFilter(BaseICAPRequestHandler):
         group_cfg, group_name, username = get_group_config(client_ip)
         block_threshold = group_cfg["block_threshold"]
         enabled_categories = group_cfg["enabled_categories"]
-        print(f"[DEBUG] Client: {client_ip} | User: {username} | Group: {group_name}")
+        #print(f"[DEBUG] Client: {client_ip} | User: {username} | Group: {group_name}")
         
         
 
@@ -598,15 +598,15 @@ class KeywordFilter(BaseICAPRequestHandler):
         group_dlp_config = group_cfg.get("dlp_config", DLP_CONFIG)
         group_dlp_patterns = group_cfg.get("dlp_patterns", DLP_PATTERNS)
         if group_dlp_config.get("enabled") and method in ('POST', 'PUT', 'PATCH') and body:
-            print(f"[DLP DEBUG] {method} to {url} | content-type: {content_type} | size: {len(body)}")
+            #print(f"[DLP DEBUG] {method} to {url} | content-type: {content_type} | size: {len(body)}")
             is_upload_domain = any(
                 d in url.lower() for d in group_dlp_config["blocked_upload_domains"]
             )
             if is_upload_domain:
-                print(f"[DLP] Scanning POST to {url} | {len(body)} bytes")
+                #print(f"[DLP] Scanning POST to {url} | {len(body)} bytes")
                 findings = scan_for_dlp(body, content_type, group_dlp_config, group_dlp_patterns)
                 if findings:
-                    print(f"[DLP BLOCKED] Client: {client_ip} | URL: {url} | Findings: {findings}")
+                    print(f"[DLP BLOCKED] Client: {client_ip} | User: {username} | Group: {group_name} | URL: {url} | Findings: {findings}")
                     block_page = DLP_BLOCK_PAGE_TEMPLATE.format(
                         url=url,
                         findings=", ".join(findings)
@@ -751,7 +751,7 @@ class KeywordFilter(BaseICAPRequestHandler):
                 #print(f"[DEBUG] Client: {client_ip} | Category: {category} | Score: {total_score} | Threshold: {block_threshold} | Bad: {matched_keywords[:5]} | Good: {matched_good[:5]}")
 
                 if total_score >= block_threshold:
-                    print(f"[BLOCKED] Client: {client_ip} | Category: {category} | Score: {total_score}")
+                    print(f"[BLOCKED] Client-ip: {client_ip} | User: {username} | Group: {group_name} | Category: {category} | Score: {total_score}")
                     block_page = BLOCK_PAGE_TEMPLATE.format(
                         category=category,
                         keyword=", ".join(matched_keywords[:10]),
