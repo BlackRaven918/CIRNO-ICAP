@@ -9,7 +9,7 @@ CONFIG_DIR = "/opt/CIRNO-ICAP"
 CONFIG_FILE = f"{CONFIG_DIR}/config.json"
 PHRASELIST_DIR = f"{CONFIG_DIR}/phraselist"
 
-NETBIRD_BASE_URL = "https://netbird.newwave.local/api"
+NETBIRD_BASE_URL = os.environ.get("NETBIRD_BASE_URL", "https://netbird.newwave.local/api")
 NETBIRD_TOKEN = os.environ.get("NETBIRD_TOKEN", "")
 
 # Updated default skeleton for a newly created group using nested user arrays
@@ -41,11 +41,24 @@ def reload_icap():
     subprocess.run(["sudo", "/usr/bin/systemctl", "kill", "-s", "USR1", "CIRNO-ICAP"])
 
 
+def get_netbird_settings():
+    """Return (base_url, token) from config, falling back to env vars."""
+    try:
+        config = read_config()
+        nb = config.get("netbird", {})
+        url = nb.get("base_url") or NETBIRD_BASE_URL
+        token = nb.get("token") or NETBIRD_TOKEN
+    except Exception:
+        url, token = NETBIRD_BASE_URL, NETBIRD_TOKEN
+    return url.rstrip("/"), token
+
+
 def netbird_get(path):
     """GET from the NetBird API, returns parsed JSON or raises."""
+    base_url, token = get_netbird_settings()
     resp = requests.get(
-        f"{NETBIRD_BASE_URL}/{path}",
-        headers={"Authorization": f"Bearer {NETBIRD_TOKEN}"},
+        f"{base_url}/{path}",
+        headers={"Authorization": f"Bearer {token}"},
         verify=False,
         timeout=10
     )
@@ -151,11 +164,34 @@ def get_groups_ips_response():
     return jsonify(response_data)
 
 
+# --- NetBird Settings ---
+@app.route('/api/netbird-settings', methods=['GET'])
+def get_netbird_settings_route():
+    config = read_config()
+    nb = config.get("netbird", {})
+    return jsonify({
+        "base_url": nb.get("base_url", NETBIRD_BASE_URL)
+    })
+
+
+@app.route('/api/netbird-settings', methods=['POST'])
+def save_netbird_settings_route():
+    data = request.json or {}
+    config = read_config()
+    if "netbird" not in config:
+        config["netbird"] = {}
+    if "base_url" in data and data["base_url"].strip():
+        config["netbird"]["base_url"] = data["base_url"].strip()
+    write_config(config)
+    return jsonify({"status": "ok"})
+
+
 # --- NetBird Sync ---
 @app.route('/api/sync-netbird', methods=['POST'])
 def sync_netbird():
-    if not NETBIRD_TOKEN:
-        return jsonify({"status": "error", "message": "NETBIRD_TOKEN environment variable is not set"}), 500
+    _, token = get_netbird_settings()
+    if not token:
+        return jsonify({"status": "error", "message": "NetBird token is not configured. Set it in the Settings tab."}), 500
 
     try:
         peers = netbird_get("peers")

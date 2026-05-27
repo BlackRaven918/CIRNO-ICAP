@@ -55,5 +55,4 @@ To run the installation pipeline, navigate to the root of the project directory 
 ```bash
 chmod +x install.sh
 sudo ./install.sh
-
 ```

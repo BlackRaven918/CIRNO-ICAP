@@ -455,6 +455,58 @@
 
   .toast.show { opacity: 1; }
 
+
+  /* --- Tabs --- */
+  .tab-nav {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1.5rem;
+  }
+
+  .tab-btn {
+    padding: 9px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    font-family: inherit;
+    transition: color 0.15s;
+  }
+
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Settings tab */
+  .settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  @media (max-width: 700px) { .settings-grid { grid-template-columns: 1fr; } }
+
+  .field-group { display: flex; flex-direction: column; gap: 6px; }
+
+  .field-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .field-hint { font-size: 12px; color: var(--text-faint); }
+
+
   @media (max-width: 640px) {
     .main-groups { grid-template-columns: 1fr; }
     .main { padding: 1rem 1rem 1rem; }
@@ -471,6 +523,12 @@
 </div>
 
 <div class="main">
+  <div class="tab-nav">
+    <button class="tab-btn active" data-tab="groups">Groups</button>
+    <button class="tab-btn" data-tab="settings">Settings</button>
+  </div>
+
+  <div class="tab-panel active" id="tab-groups">
   <div class="main-groups">
     <div>
       <div class="card">
@@ -587,6 +645,36 @@
       </div>
     </div>
   </div>
+  </div><!-- /tab-groups -->
+
+  <!-- Settings tab -->
+  <div class="tab-panel" id="tab-settings">
+    <div class="card" style="max-width:680px;">
+      <div class="card-header">
+        <span class="card-header-label">NetBird Integration</span>
+      </div>
+      <div class="card-body">
+        <p class="section-desc" style="margin-bottom:1rem;">
+          Configure the NetBird management API endpoint used for the
+          <strong>Sync from NetBird</strong> function. Changes take effect immediately — no restart needed.
+        </p>
+        <div class="settings-grid" style="margin-bottom:1.25rem;">
+          <div class="field-group" style="grid-column:1/-1;">
+            <label class="field-label" for="nb-url">API Base URL</label>
+            <input type="text" id="nb-url" placeholder="https://netbird.example.com/api" />
+            <span class="field-hint">The root URL of your NetBird management API (without a trailing slash).</span>
+          </div>
+
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="btn-save-netbird">Save NetBird Settings</button>
+          <button class="btn" id="btn-test-netbird">Test Connection</button>
+          <span id="nb-test-result" style="font-size:12px;color:var(--text-muted);"></span>
+        </div>
+      </div>
+    </div>
+  </div><!-- /tab-settings -->
+
 </div>
 
 <div class="toast" id="toast"></div>
@@ -977,6 +1065,69 @@ document.getElementById('btn-save').addEventListener('click', async () => {
 });
 
 fetchConfig();
+
+// --- Tabs ---
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'settings') loadNetbirdSettings();
+  });
+});
+
+// --- NetBird Settings ---
+async function loadNetbirdSettings() {
+  try {
+    const r = await fetch('/api/netbird-settings');
+    const data = await r.json();
+    document.getElementById('nb-url').value = data.base_url || '';
+
+  } catch(e) {
+    showToast('Could not load NetBird settings');
+  }
+}
+
+document.getElementById('btn-save-netbird').addEventListener('click', async () => {
+  const url = document.getElementById('nb-url').value.trim();
+  if (!url) { showToast('API URL cannot be empty'); return; }
+  try {
+    const r = await fetch('/api/netbird-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base_url: url })
+    });
+    const data = await r.json();
+    if (data.status === 'ok') {
+      showToast('NetBird settings saved');
+      loadNetbirdSettings();
+    } else {
+      showToast('Save failed');
+    }
+  } catch(e) {
+    showToast('Could not reach server');
+  }
+});
+
+document.getElementById('btn-test-netbird').addEventListener('click', async () => {
+  const result = document.getElementById('nb-test-result');
+  result.textContent = 'Testing…';
+  try {
+    const r = await fetch('/api/sync-netbird', { method: 'POST' });
+    const data = await r.json();
+    if (data.status === 'ok') {
+      result.textContent = `✓ OK — ${data.peers_processed} peers found`;
+      result.style.color = 'var(--success-text)';
+    } else {
+      result.textContent = '✗ ' + (data.message || 'Unknown error');
+      result.style.color = 'var(--danger-text)';
+    }
+  } catch(e) {
+    result.textContent = '✗ Could not reach server';
+    result.style.color = 'var(--danger-text)';
+  }
+});
 </script>
 </body>
 </html>
